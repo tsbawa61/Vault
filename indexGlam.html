@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlamTrack - Professional Salon Membership & Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans antialiased">
+
+  <div id="auth-container" class="min-h-screen flex items-center justify-center px-4 py-12">
+    <div class="max-w-md w-full bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 p-8 space-y-6">
+      <div class="text-center">
+        <h1 class="text-3xl font-black text-indigo-400 tracking-wider uppercase">GlamTrack</h1>
+        <p class="text-sm text-slate-400 mt-2">Enterprise Multi-Tenant Membership Engine</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-400 mb-1">Select Access Gate</label>
+          <select id="auth-gate" onchange="toggleAuthUIFieldVisibility()" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="OWNER">Salon Owner Entrance</option>
+            <option value="MANAGER">Salon Manager Entrance</option>
+            <option value="CUSTOMER">Customer Workspace</option>
+            <option value="ADM_USER">ADM User Portal (Management)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-400 mb-1">Email Address / User Reference ID</label>
+          <input type="text" id="auth-identifier" placeholder="operator@salon.com" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div id="auth-password-row">
+          <label class="block text-xs font-bold uppercase text-slate-400 mb-1">Security Code / Password</label>
+          <input type="password" id="auth-credential" placeholder="••••••••" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <button onclick="executeAuthenticationRequest()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors shadow-lg shadow-indigo-600/20 mt-2">
+          Verify and Establish Session
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-workspace" class="hidden min-h-screen flex flex-col">
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shadow-md">
+      <div>
+        <span class="text-xs font-mono text-indigo-400 uppercase tracking-widest block">Operational Node</span>
+        <h2 id="display-user-meta" class="text-xl font-bold text-slate-100">Loading Active Profile Context...</h2>
+      </div>
+      <div class="flex items-center space-x-4">
+        <span id="session-countdown-pill" class="text-xs bg-slate-900 px-3 py-1.5 border border-slate-700 rounded-full font-mono text-amber-400">Session Timeout Active</span>
+        <button onclick="terminateActiveSessionContext()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-colors">
+          Kill Session
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-1 xl:grid-cols-4 gap-6 p-6">
+      
+      <aside class="bg-slate-800 border border-slate-700 rounded-xl p-4 space-y-2 h-fit shadow-xl">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-3">Workspace Command Center</h3>
+        
+        <div id="nav-group-super" class="hidden space-y-1">
+          <button onclick="switchActiveTab('pane-super-salons')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg bg-indigo-900/40 text-indigo-300 border border-indigo-700/30">Provision & Manage Salons</button>
+        </div>
+
+        <div id="nav-group-operational" class="hidden space-y-1">
+          <button onclick="switchActiveTab('pane-master-data')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700">Services & Categories</button>
+          <button onclick="switchActiveTab('pane-common-packs')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700">Common Service Packs</button>
+          <button onclick="switchActiveTab('pane-customer-profiles')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700">Customer Management</button>
+          <button onclick="switchActiveTab('pane-customer-packs')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700">Assign Customer Packs</button>
+          <button onclick="switchActiveTab('pane-utilizations')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700">Process Service Utilization</button>
+          <button id="btn-nav-rbac" onclick="switchActiveTab('pane-rbac-delegation')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-700 hidden">RBAC Staff Delegation</button>
+        </div>
+
+        <div id="nav-group-customer" class="hidden space-y-1">
+          <button onclick="switchActiveTab('pane-customer-dashboard')" class="w-full text-left px-3 py-2 text-sm font-medium rounded-lg bg-emerald-900/40 text-emerald-300 border border-emerald-700/30">My Active Subscriptions</button>
+        </div>
+      </aside>
+
+      <main class="xl:col-span-3 space-y-6">
+
+        <div id="pane-super-salons" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <h3 class="text-xl font-bold text-indigo-400">Global Tenant Provisioning Board</h3>
+          <form id="form-create-salon" onsubmit="handleTenantCreation(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900 p-4 rounded-xl border border-slate-700">
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Salon / Enterprise Name</label>
+              <input type="text" id="salon-name" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Primary Email Contact</label>
+              <input type="email" id="salon-email" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Primary Secure Phone Line</label>
+              <input type="text" id="salon-phone" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Initial Password Configuration</label>
+              <input type="password" id="salon-password" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase py-2.5 rounded transition-all">Provision Salon Account</button>
+            </div>
+          </form>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-400 font-bold uppercase text-xs">
+                  <th class="p-3">User No</th>
+                  <th class="p-3">Salon Enterprise</th>
+                  <th class="p-3">System Email</th>
+                  <th class="p-3">State Timeline</th>
+                  <th class="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-salons" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pane-master-data" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-slate-100">Salon Structural Master Catalogues</h3>
+            <div class="flex space-x-2">
+              <button onclick="openGenericModal('modal-category')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-bold uppercase">Add Category</button>
+              <button onclick="openGenericModal('modal-service')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-bold uppercase">Add Service</button>
+              <button onclick="openGenericModal('modal-subservice')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-bold uppercase">Add Sub-Service</button>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-slate-900 border border-slate-700 rounded-xl p-4">
+              <h4 class="text-xs uppercase font-bold text-indigo-400 tracking-wider mb-3">Service Categories</h4>
+              <ul id="list-categories" class="space-y-2 text-sm divide-y divide-slate-800"></ul>
+            </div>
+            <div class="bg-slate-900 border border-slate-700 rounded-xl p-4">
+              <h4 class="text-xs uppercase font-bold text-indigo-400 tracking-wider mb-3">Services Catalog</h4>
+              <ul id="list-services" class="space-y-2 text-sm divide-y divide-slate-800"></ul>
+            </div>
+            <div class="bg-slate-900 border border-slate-700 rounded-xl p-4">
+              <h4 class="text-xs uppercase font-bold text-indigo-400 tracking-wider mb-3">Sub-Services Allocation</h4>
+              <ul id="list-subservices" class="space-y-2 text-sm divide-y divide-slate-800"></ul>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-common-packs" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <h3 class="text-xl font-bold text-slate-100">Global Common Service Packs Compiler</h3>
+          <form id="form-create-common-pack" onsubmit="handleCommonPackAssembly(event)" class="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Pack Unique Code ID</label>
+                <input type="text" id="cpack-code" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Service Pack Descriptive Title</label>
+                <input type="text" id="cpack-title" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Select Inclusion Sub-Services (Hold Ctrl/Cmd to select multiple)</label>
+              <select id="cpack-services-multiselect" multiple onchange="calculateCommonPackFormMetrics()" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm h-28 text-slate-200 focus:outline-none"></select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700">
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Standard Cost Sum</label>
+                <input type="text" id="cpack-total-cost" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-400 font-mono">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Calculated Duration (Mins)</label>
+                <input type="text" id="cpack-duration" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-400 font-mono">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Manual Pricing Override</label>
+                <input type="number" id="cpack-override-price" oninput="calculateCommonPackFormMetrics()" class="w-full bg-slate-700 border border-indigo-500 rounded p-2 text-sm font-bold text-indigo-300">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Computed Markdown Discount</label>
+                <input type="text" id="cpack-discount" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-amber-400 font-bold font-mono">
+              </div>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded text-xs uppercase tracking-wider">Publish Common Service Membership Pack</button>
+          </form>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="container-common-packs"></div>
+        </div>
+
+        <div id="pane-customer-profiles" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-slate-100">Tenant Operational Entity Registration (CRM Node)</h3>
+            <button onclick="openGenericModal('modal-crm-user')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-bold uppercase tracking-wider">Register Management Staff or Customer</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-400 font-bold uppercase text-xs">
+                  <th class="p-3">System Id</th>
+                  <th class="p-3">Role Matrix</th>
+                  <th class="p-3">Profile Identity</th>
+                  <th class="p-3">Location Matrix</th>
+                  <th class="p-3">Demographic</th>
+                  <th class="p-3 text-right">State Handling</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-crm" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pane-customer-packs" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <h3 class="text-xl font-bold text-slate-100">Custom Subscription & Pack Allotment Engine</h3>
+          <form id="form-allot-customer-pack" onsubmit="handleCustomerPackAllotment(event)" class="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Target Customer Profile</label>
+                <select id="allot-customer-select" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white"></select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Pack Type Strategy Context</label>
+                <select id="allot-pack-type" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white">
+                  <option value="TYPE1">TYPE 1 (Fixed Count Operational Allocations Matrix)</option>
+                  <option value="TYPE2">TYPE 2 (Value / Monetary Balance Account Structure)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Membership Scope Bounds</label>
+                <select id="allot-scope" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white">
+                  <option value="INDIVIDUAL">Individual Account Scope</option>
+                  <option value="COUPLE">Couple Operational Dynamic</option>
+                  <option value="FAMILY">Family Extension Framework</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Select System Services Matrix (Multiple Selection Available)</label>
+              <select id="allot-services-multiselect" multiple onchange="calculateCustomerPackFormMetrics()" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm h-32 focus:outline-none text-slate-200"></select>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700">
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Standard Item Aggregation</label>
+                <input type="text" id="allot-total-cost" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm font-mono text-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Duration Metrics (Mins)</label>
+                <input type="text" id="allot-duration" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm font-mono text-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Custom Allotment Rate Override</label>
+                <input type="number" id="allot-override-price" oninput="calculateCustomerPackFormMetrics()" class="w-full bg-slate-700 border border-indigo-500 rounded p-2 text-sm text-indigo-300 font-bold">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Calculated System Discount</label>
+                <input type="text" id="allot-discount" readonly class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm font-bold text-amber-400 font-mono">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Service Volume Count Per Item</label>
+                <input type="number" id="allot-allowed-count" value="1" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Financial Receipt Reference Tracking Sequence</label>
+                <input type="text" id="allot-receipt-no" required placeholder="REC-XXXX" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Subscription Contract Operational Lifetime Bound (Months)</label>
+                <input type="number" id="allot-validity-months" value="6" required class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded text-xs uppercase tracking-wider">Commit Allotment & Generate Subscription Lifecycle Token</button>
+          </form>
+        </div>
+
+        <div id="pane-utilizations" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <h3 class="text-xl font-bold text-slate-100">Live Service Pack Utilization & Verification Deck</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-slate-900 p-4 border border-slate-700 rounded-xl space-y-4">
+              <h4 class="text-xs uppercase font-bold text-indigo-400 tracking-wider">Verify Client & Extract Membership</h4>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Select Salon Client Target</label>
+                <select id="util-customer-select" onchange="loadActiveCustomerSubscriptionPacks()" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white"></select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Target Subscription Account</label>
+                <select id="util-pack-select" onchange="loadSubscriptionPackItemsStructure()" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-white"></select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Execution Operator Remarks Log</label>
+                <textarea id="util-remarks" placeholder="Add custom notes..." class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm h-20 text-white focus:outline-none"></textarea>
+              </div>
+              <button onclick="executeUtilizationLog()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded text-xs uppercase tracking-widest">Commit Utilization Log</button>
+            </div>
+
+            <div class="md:col-span-2 bg-slate-900 p-4 border border-slate-700 rounded-xl space-y-4">
+              <h4 class="text-xs uppercase font-bold text-indigo-400 tracking-wider">Subscription Quota Breakdown</h4>
+              <div id="container-pack-items-breakdown" class="space-y-2 text-sm max-h-96 overflow-y-auto">
+                <p class="text-slate-500 italic">Select a customer profile and active membership framework contract context to verify allocations data trace.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-rbac-delegation" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <h3 class="text-xl font-bold text-slate-100">Dynamic RBAC Matrix & Access Delegation Framework</h3>
+          <p class="text-xs text-slate-400">Configure global cascading interface permissions for the Salon Manager execution layer.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="container-rbac-managers"></div>
+        </div>
+
+        <div id="pane-customer-dashboard" class="app-tab-pane hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-xl space-y-6">
+          <div class="border-b border-slate-700 pb-4">
+            <h3 class="text-2xl font-black text-emerald-400 tracking-wide uppercase">My Membership Vault</h3>
+            <p class="text-xs text-slate-400 mt-1">Real-time usage volume matrices, tracking indices, and published promotional flyers.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="customer-vault-dashboard-wrapper"></div>
+          <div class="border-t border-slate-700 pt-4 space-y-4">
+            <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-widest">Promotions, Seasonal Adjustments & Offers</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="customer-promotional-matrix-deck"></div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <div id="modal-category" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-sm w-full p-6 space-y-4">
+      <h3 class="text-base font-bold text-slate-100">Add Category</h3>
+      <div class="space-y-3">
+        <input type="text" id="m-cat-code" placeholder="Category Code (e.g., 01)" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="text" id="m-cat-name" placeholder="Category Title" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="text" id="m-cat-desc" placeholder="Operational Description" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeGenericModal('modal-category')" class="px-3 py-1.5 bg-slate-700 rounded text-xs font-bold text-slate-300">Cancel</button>
+        <button onclick="commitMasterCategory()" class="px-3 py-1.5 bg-indigo-600 rounded text-xs font-bold text-white">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-service" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-sm w-full p-6 space-y-4">
+      <h3 class="text-base font-bold text-slate-100">Add Service</h3>
+      <div class="space-y-3">
+        <select id="m-ser-cat" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white"></select>
+        <input type="text" id="m-ser-code" placeholder="Service Code (e.g., 01)" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="text" id="m-ser-name" placeholder="Service Identification String" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="text" id="m-ser-desc" placeholder="Structural Description Log" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeGenericModal('modal-service')" class="px-3 py-1.5 bg-slate-700 rounded text-xs font-bold text-slate-300">Cancel</button>
+        <button onclick="commitMasterService()" class="px-3 py-1.5 bg-indigo-600 rounded text-xs font-bold text-white">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-subservice" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-sm w-full p-6 space-y-4">
+      <h3 class="text-base font-bold text-slate-100">Add Sub-Service</h3>
+      <div class="space-y-3">
+        <select id="m-sub-ser" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white"></select>
+        <input type="text" id="m-sub-code" placeholder="Sub-Service Serial (e.g., 001)" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="text" id="m-sub-name" placeholder="Specific Sub-Service Activity Name" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="number" id="m-sub-rate" placeholder="Standard Cost (INR)" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        <input type="number" id="m-sub-dur" placeholder="Process Duration Timeline (Minutes)" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeGenericModal('modal-subservice')" class="px-3 py-1.5 bg-slate-700 rounded text-xs font-bold text-slate-300">Cancel</button>
+        <button onclick="commitMasterSubService()" class="px-3 py-1.5 bg-indigo-600 rounded text-xs font-bold text-white">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-crm-user" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-base font-bold text-slate-100">CRM Entity Creation</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Role Domain</label>
+          <select id="mc-role" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+            <option value="MANAGER">Salon Manager Staff Profile</option>
+            <option value="CUSTOMER">Standard Customer Profile Context</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Full Identity Name</label>
+          <input type="text" id="mc-name" required class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Sex Identity Selection</label>
+          <select id="mc-sex" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Password Key Sequence</label>
+          <input type="password" id="mc-password" required class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Secure Phone Interface Link</label>
+          <input type="text" id="mc-phone" required class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Corporate / Client Email Address</label>
+          <input type="email" id="mc-email" required class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Demographic Age Matrix Group</label>
+          <select id="mc-agegroup" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+            <option value="Kids (3–12)">Kids (3–12)</option>
+            <option value="Teens (13–19)">Teens (13–19)</option>
+            <option value="Young Adults (20–29)">Young Adults (20–29)</option>
+            <option value="Professionals (30–45)">Professionals (30–45)</option>
+            <option value="Gen X (Ages 46–60)">Gen X (Ages 46–60)</option>
+            <option value="Seniors (61+)">Seniors (61+)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Geographic Metric Distance Options</label>
+          <select id="mc-distance" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+            <option value="Hyper-Local Range (0–3 km)">Hyper-Local Range (0–3 km)</option>
+            <option value="Local Range (3–7 km)">Local Range (3–7 km)</option>
+            <option value="Mid Range (8–14 km)">Mid Range (8–14 km)</option>
+            <option value="Outreach Scope (15 km+)">Outreach Scope (15 km+)</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Street Address Line</label>
+          <input type="text" id="mc-address" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">City Matrix Node</label>
+          <input type="text" id="mc-city" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Google Maps URL Link Location (Optional)</label>
+          <input type="url" id="mc-map" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-sm text-white">
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-2 border-t border-slate-700">
+        <button onclick="closeGenericModal('modal-crm-user')" class="px-3 py-1.5 bg-slate-700 rounded text-xs font-bold text-slate-300">Cancel</button>
+        <button onclick="commitCRMUserProfileEntity()" class="px-3 py-1.5 bg-indigo-600 rounded text-xs font-bold text-white">Publish User Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

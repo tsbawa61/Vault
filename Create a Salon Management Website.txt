@@ -1,0 +1,521 @@
+Create a Salon Management Website :
+:
+Aim:
+      To develop a Membership Tracking System for A Salon to improve Loyalty. A Salon Owner wants to manage customers and wants to provide different service packs to the customers.
+
+What is expected from the website:
+
+1. Users Section: 
+   a) There will be one SUPER USER, viz the developer
+   b) The Super User will create accounts of different Salons. Super User and Each Salon Owner will be allotted User no, which will not be  user name or user id. It will be a running serial number.
+   c) Salon Owner will login from Users menu. Each Salon Owner will create accounts for  Salon Manager iii) different Customers. There can be multiple Salon Managers.
+   d) Users menu will have three options of logins, one each for Salon Owner, Salon Manager iii)  Customers.
+   e)  Another additional menu option for login will be "ADM User".  Under "ADM User" option there will be provision for add/modify/delete/activate/deactivate/archive  a Customer or Salon Manager
+   f) For any User (Except SUPER USER) , there will be fields for Name, Sex, Password, Phone number, email-id, Address, City, Google map link(Optional), age-group, distance.
+   g) Age groups will be Kids (3–12), Teens (13–19), Young Adults (20–29), Professionals (30–45), Gen X (Ages 46–60), Seniors (61+)
+   h) Distance to be accepted from the options : Hyper-Local Range (0–3 km), Local Range (3–7 km), Mid Range(8-11 km), Regional Range (12+  km)
+   i) A Customer Number will be generated on creation of Customer. It will be first three letters of the name and a three digit running serial number.
+   j) There is no Customer login at present. Password is null for the Customer. 
+   k) Each customer will be allotted a simple Customer Number. Customer Number will be First Three Letters of Customer Name and a running three-digit serial number with zero padding on the left. 
+  l)  User details be shared by email to the user creating it  and , whenever  the user is created or modified or deleted or archived.
+  m) Email-id be OTP verified
+  n) A Salon Owner should be able to delete/activate/deactivate/archive only Salon Manager Users  and Customer users created by the Salon Owner himself (and not other Salon Owners), whereas Super User can delete/activate/deactivate/archive any Salon Owner User or Salon Manager User or Salon's customers.
+  o) When a Super User  deletes/activates/deactivates  Salon Owner  user then  Salon Manager and all Customer user under this Salon Owner user are  deleted/activated/deactivated.  
+  p) While creating a Salon Owner user, Salon Owner's user folder name be accepted in the UI and this  user folder name will be stored in User's record . Some of the files will be stored in this user folder and will be part of data for that user.
+ q) Address field should be multiline text box
+ r) During displays of data, Contact Numbers to be clickable and on click should be copied to clipboard, Google map link to be clickable and Google map should be opened on clicking.
+ s) Cascade delete option be considered, whereever necessary  but before delete confirmation be made from the user with WARNING beep and Message.
+ t) A Parent User field will be part of User record, which will be User no of the parent.
+ u) There will be timeout of 15 minutes for logins.
+ v) SUPER USER login option will not be shown after Salon Owner/ Manager login .
+ w) SUPER USER login will be through emailid and OTP option and not through password option.
+ x) When a Salon Owner/Salon Manager is to be logged in, following checks will be required for User :
+     i) current date to be more than startDate
+    ii) Either expiryDate is null or current date is not more than expiryDate 
+   iii) User is not deactivated.
+
+2.  Suggested database schemas samples:
+    a) For User
+
+user=
+{             
+  "userNo": "0001",                    // Running serial number (Super User and  Salon Owner only)
+  "role": "SUPER_USER | OWNER | MANAGER | CUSTOMER ",
+  "name": "Salon Glam",
+  "sex": "Male",
+  "password": "hashed_password",      // Not stored in plain text
+  "phone": "+91XXXXXXXXXX",
+  "email": "aakash@example.com",
+  "address": "Sector 9, Panchkula",
+  "city": "Panchkula",
+  "ageGroup": "25-35",
+  "distance": "3-7km",                      // optional, km
+  "parentUser": "0001"                      // User no of parent user
+  "googleMapLink": "https://maps.google.com/...",
+  "customerNo": "AAA001",         // For customers only (first 3 letters + 3-digit serial), otherwise null
+  "ownerFolder": "owner_001", // For Salon Owner only, otherwise null
+  "active": true,
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, null inititally,editable
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+  "ownerUserNo": "001",                       // Owner's User No, will be null in case of SUPER_USER
+  "shop_image": "shop_front.png",      // File in owner’s folder
+  "bckGround_image": "home_bg.png",    // File in owner’s folder
+ "accessRights": {
+    "createCategory": true,
+    "createService": true,
+    "createSubService": true,
+    "modifyCategory": true,
+    "modifyService": true,
+    "modifySubService": true,
+    "deleteCategory": true,
+    "deleteService": true,
+    "deleteSubService": true,
+    "createCommonServicePack": true,
+    "createCustomerServicePack": true,
+    "utilizeServicePack": true,
+    "modifyShopImage": true,
+    "modifyBackgroundImage": true,
+    "modifyPromoImages": true,
+   "readonlyCommonServicePack": true,
+    "readonlyCustomerServicePack": true
+     }
+
+}
+ 
+3) Guidelines for Master Data Creation for a Salon only by Salon Owner/Manager Login .
+  a) For all these types of Data, there will be Add/Modify/Delete options and Activate/Deactivate/Archive options as per suitability.
+  b) Master data creation screens/UIs  will be  created for i) All Category of Services ii) Available Services under each Category   iii) All Sub-services under a Service iv) Customers.
+  c) For different types of codes generation, for each Salon Owner, running serial numbers will start with 1.
+  d) Whenever  master data is added, Owner's User No ("ownerUserNo") be also Stored.
+  e)  Start Date, Expiry Date, Date (& time) of Creation of Record fields also.
+  f) Whenever an existing category/service/sub-service/User is to be archived, expiry date be updated (current date will be displayed but will be editable)  and cannot be null.  
+   g) At all places, When a service or sub-service or service pack is to be selected in a dropdown, there should be provision for filter/searching text in service/sub-service/service pack name
+   h) At all places, Dates should be accepted and displayed in dd/mm/yyyy format. On display of a date, day of week be displayed 
+   i) At all places, Everywhere appropriate Tool tip/placeholder message be generated, as Salon Managers and Owners are novice users.
+   j) Whenever a service is to be selected for customer:  Service and Subservice together (separated by "→ " symbol) will be considered as a single service for the customer for display purposes (e.g. in dropdown menu).. In the database, actually finally selected sub-service will be stored. 
+   k) Trendy name  "GlamTrack" has been chosen for the website.
+
+
+4). Following are common Categories of Salon Services. These may be autopopulated by the software and autogenerated codes alloted to the Categories with two digit running serial numbers as codes. 
+     a) Hair Services
+     b) Skin & Beauty Services
+     c) Makeup & Bridal Services
+     d) Hands & Feet Services
+     e) Eyelash and Eyebrow Treatments Services
+      f) Groom Makeup for the Modern Man Services
+     g) Wellness Add‑Ons 
+
+5) Suggested Database Schema sample for Categories of Salon Services::
+
+serviceCategory=
+{
+  "ownerUserNo": "001",
+  "catCode": "01",
+  "catName": "Hair Services",
+  "catDescription": "Haircuts, coloring, spa, styling",
+  "active": true,
+  "createdBy": "OWNER | MANAGER",
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, null inititally, editable
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+
+
+6). Following are common Salon Services (appearing before "→" special symbol), and  sub-services (each separated by ";" ), appearing after  "→" special symbol, under the above categories. These may be autopopulated by the software and autogenerated codes alloted to the services and subservices. Services will be allotted  with two digit running serial numbers as codes. Sub-services will be allotted  with three digit running serial numbers as codes. Everywhere,  Service and Subservice together (separated by "→ " symbol) will be considered as a single service for the customer.
+
+Common Salon Services. 
+
+a) Hair Services
+Haircuts → Basic trims; Layered cuts; Medium Cut; Long Cut
+
+Hair Coloring → Global color; Highlights; Balayag; Root touch‑ups; Streaks
+
+Hair Spa → Matrix; Loreal; Keratin Spa
+
+Blowouts & Styling → Blow Dry; Hair Straightening; Curling; Basic Styling; Advance Styling
+
+Permanents & Relaxers → Smoothening treatment; Nanoplastia Treatment; Rebonding Treatment; Botox Treatment; Keratin Treatment
+
+Other Hair Services → Brading; Buns. 
+
+b) Skin & Beauty
+Facials → Hydra facial; Anti‑aging; Fruit Facial; Anti Tan Facial; O3;
+
+Waxing → Full body; Arms & Underarms; Half Legs; Full Legs; Bikini; Stomach & Back
+
+Body Treatments → Body Polishing; Body Spa; Relaxation therapies
+
+c) Makeup & Bridal
+Bridal Makeup → HD Bridal Makeup; Advanced Bridal with Air Brush; Premium Bridal Makeup
+
+Event Makeup → Basic Makeup; Engagement Makeup; Advance Makeup
+
+Runway Secrets → Trendy styles; High‑fashion makeup styles. 
+
+d) Hands & Feet
+Manicure → Classic; Premium
+
+Pedicure → Classic; Premium
+
+Nail Art → Creative designs; Glitter; Ombre
+
+Nail Extensions → Acrylic extensions ; Gel extensions
+
+e) Eyelash and Eyebrow Treatments
+
+Eyebrow Shaping → Threading; Waxing;
+
+
+f) Groom Makeup for the Modern Man
+Natural Groom Makeup → Subtle & Basic; Advance look
+
+g) Wellness Add‑Ons
+Massage Therapy → Head; Neck; Shoulders; Full body.
+
+Aromatherapy → Relaxation Therapy: Body Spa
+
+Hair Spa → Matrix; Loreal; Keratin Spa
+ 
+Hair Cut→ Basic Cut; Advance cut
+
+Beard & Mustache Styling → Shaping & trimming.
+
+
+
+7. Suggested database schemas sample:
+    a) For Services:
+
+service=
+{
+  "ownerUserNo": "001",
+  "serviceCode": "01",
+  "serviceName": "Haircut",
+  "serviceDescription": "Different haircut styles",
+  "catCode": "01",         // Parent category code
+  "createdBy": "OWNER | MANAGER"
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, null inititally,editable
+  "createdAt": "2026-05-13T18:20:00Z", // Current date, non-editable
+  "active": true
+
+}
+
+
+  b) For Sub-Services :
+
+subService= 
+{
+  "ownerUserNo": "001",
+  "subServiceCode": "001",
+  "subServiceName": "Layered Cut",
+  "serviceCode": "01",          // Parent service code
+  "rate": 600,
+  "durationMinutes": 40,
+  "active": true,
+  "createdBy": "OWNER | MANAGER",
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, null inititally,editable
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+
+8.  Sub-Services :    
+      a) There will be different sub-services of a Salon, sub-services rates, approximate time in minutes  to be taken to serve the customer for this sub-Service..
+
+
+9. Common Service Packs Section:
+   a) There will be Seasonal Discounts, Discounts on Special Occasions like New Year, Christmas, Diwali, Marriage Season, Navratre, Independence/Republic Day, Bhaiya Dooj, Rakhi, Karva Chauth. Each of the above discounts will have Start and Expiry Date. Expiry date will be optional. Start and Expiry Date may be accepted from the Salon Owner/Manager. 
+   b) There will be different service packs 
+   d) Each Service Pack will have a Title, a Total Cost, overall discount and Offer Price.
+   c) Each Service Pack will have various Sub-Services, their actual rates, discounts
+   d) Common Service Pack Id will be First Three Letters of Service Pack Name/Title and a running two digit number.
+   e) Discount Code will be First Three Letters of Discount Name/Title and a running two digit number.
+  g) Duration to serve the service pack will be sum of durations of each sub-service under it. It will be editable field to account for some sub-services being imparted simultaneously.
+  h) Time, in minutes,  to be taken to serve the customer (durationMinutes) will not be part of  Service Category or Service entities.
+  i) Offer Price of the Service Pack will be sum of the Final Prices of each of the sub-services under it..
+  j) Total Cost of the Service Pack will be sum of the rates of each of the sub-service under it.
+  k) Overall Discount of the Service Pack will be back calculated from above-mentioned Offer Price and Total Cost 
+   l) There will be option of Sharing the common service packs available so far by  the Salon Owner/Manager  
+   m) An flyer image file for a service pack for promotional purposes be accepted from the Salon Owner PC/mobile.
+  n) An option for the error log be there in the menu system. Technical Errors in detail should be displayed and recorded in an error log file in the same folder as the index.html file or app file.
+
+
+10.  Suggested database schemas samples:
+  a) For Discounts
+
+discount=
+{
+  "ownerUserNo": "001",
+ "discountId": "auto_uid",
+ "discountCode": "aaa01",
+  "title": "Diwali Special",
+  "discountType":  "SEASONAL | OCCASIONAL | SPECIAL"
+  "percentage": 20,
+  "startDate": "2026-10-20", // Current date, editable
+  "expiryDate": "2026-10-30",   // optional,editable
+  "occasion": "Diwali",
+  "active": true,
+  "createdBy": "OWNER | MANAGER"
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+   b) For Common Service Pack:
+
+servicePack =
+{
+  "ownerUserNo": "001",
+  "packId": "aaa01",
+  "title": "Bridal Glow Pack",
+  "totalCost": 3500,
+  "overallDiscount": 16,
+  "offerPrice": 2950,
+  "durationMinutes": 180
+  "subServices": [
+    {
+      "subServiceCode": "ref_to_subservice_doc",
+       "rate": 1500,
+      "discount": 10,
+      "finalPrice": 1350,
+
+     },
+    {
+      "subServiceCode": "ref_to_subservice_doc",
+      "rate": 2000,
+      "discount": 20,
+      "finalPrice": 1600
+    }
+  ],
+  "active": true,
+"createdBy": "OWNER | MANAGER"
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, null inititally,editable
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+
+11. Whenever a Service Category or Service or Sub-Service is to be selected to be part of a Common Service Pack or Customer Service Pack, it should be active and not expired. For this following checks to be applied for Service Category/Service/Sub-Service:-
+     i) current date to be more than startDate
+    ii) Either expiryDate is null or current date is not more than expiryDate 
+   iii) Service Category/Service/Sub-Service is not deactivated.
+
+12. Building Additional Master Data for the Salon only by Salon Owner/Manager in Data Management Section
+  a) Additional Master data creation screens/UIs  will be  created for  i) Common Service Packs  ii) Discounts on Seasonal/Special Occasions
+  b) For different types of codes generation, for each Salon, running serial numbers will start with 1.
+  c) Whenever  master data is added, Owner's User No ("ownerUserNo") be also Stored.
+  e) Whenever an existing  Common Service Pack/Discount/ is to be archived, expiry date be updated (current date will be displayed for expiry date, but will be editable)  and cannot be null.
+
+
+
+13.  Membership deals /Service Pack Allotment to a Customer by Salon Owner/Manager
+  a) User Interface (UI) will offer a Customized Service Pack Creation screen/sub screen 
+  b) Customer number will be accepted then UI will  display service packs available and their details 
+  c) Then it will display options for Add/Modify/Delete/ Activate/Deactivate/Archive options for Membership deals
+  d) In case of creation of Service Pack, It will generate a name for the Service Pack to be Created. The name for the service pack will  be like "SP-<n>", "n" here will be running serial number, which will start from 1 for each different customer.
+  e) For creation/modification of service pack, in the UI, Sub-Services will be added to/deleted from this pack. UI wiil accept alongwith discount offered for the said service,  allowed number of services of the said service, active/inactive (active initally), coins to be imparted to the customer (if any) when the said service is availed . In case any number of services of a particular sub-service are allowed, a check box be provided for that and if this flag is yes, counter for  number of services allowed be set to zero .
+  f) Net amount, after discount, rounded to nearest tens figure will be shown. This Net amount should be editable for negotiations.   
+  g)  For each different Customer, running serial numbers will start with 1.
+  h) Start date of a service pack will be current date and editable for making past entries.
+  i) Expiry date, if any, and initally null, of the service pack be accepted.
+  j) A running total amount and offer price  be shown which will be updated after addition of every sub-service.
+  k) As customer may negotiate a offer price. The offer price will be editable and saved alongwith.
+  l) There will be two types of service packs to be called Type 1 and Type 2. Service Pack Types (packType field)  will be saved alongwith the service packs info.
+  m) In Type 1, sub-services will be added and their discounts. After creation of pack, An optional payment to be accepted alongwith receipt number, if any, and date.
+  n) In Type 2, After creation of pack, an advance will be accepted and overall discount in the services will be offered. This discount will be applied to all the services under this service pack.  An payment to be accepted alongwith receipt number, if any and date.
+o) Customer Service pack may be for Self/Spouse/Couple/Family/Extended Family. Option be taken from customer.
+p) Provision for Modification/Deletion/View/Archive of Record by Owner only.
+q)  An entry will be made in database, whether data was entered by Owner or Manager.
+r) For  the new customer service pack, there will be additional field per sub-service  in database for no of coins earned on availing a sub-service after the sub-service is served. total coins earned for this service pack will have  initial value 0. 
+s) Duration to serve this service pack will be sum of durations of each sub-service under it. It will be editable field to account for some sub-services being imparted simultaneously.
+t) Upon Allotment of a Service Pack to a customer after creation of the record an email will be sent to the Salon Owner alongwith the details of the service pack allotted.
+u) There should be option of Sharing the service pack with the customer,  containing all the fields of the service pack. Option of Email/Text Message/Whatsapp be accepted from Customer. In case of Whatsapp, a flyer be sent.
+v) There will be two sub-schemas for customer service pack  i) For service pack containing fields like name, start date, expiry date, total coins earned , active or inactive, service pack  type, total amount, amount received or not, receipt no (optional), receipt date  ii) For sub-services selected under the service pack containing fields like sub-service, price, discount, coins to be imparted for the sub-service, coins earned upon availing the service, date of availing sub-service,  data entered by Owner or Manager,  number of sub-services proposed, check box for any number of sub-services proposed (i.e. no limit on number of sub-services)
+
+
+14. Suggested database schemas samples:
+      a) For Customer Service Packs:
+
+customerServicePack=
+{
+  "ownerUserNo": "001",                        
+  "customerNo": "aaa001",
+  "packName": "SP-01",             // Auto-generated name 
+  "packType": "TYPE1 | TYPE2",                // Service Pack Type
+   "offerPrice": 4500,                     // After discount
+  "totalAmount": 5000,                    // Negotiated total amount
+  "overallDiscount": 10,                  // For Type 2 packs
+  "durationMinutes": 60                          // Approximate time to serve the pack
+ "totalCoinsEarned": 0,                  // Initial value zero
+  "totalAmountSpent": 0,                // Initial value zero
+  "customerScope": "SELF | SPOUSE | COUPLE | FAMILY | EXTENDED_FAMILY",
+  "amountReceived": true,
+  "receiptNo": "RECEIPT12345",                  // Optional
+  "receiptDate": "2026-05-13",            // Optional
+  "startDate": "2026-05-13",              // Current date, editable
+  "expiryDate": "2026-06-13",             // Optional, editable, null initially
+  "createdAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+  "active": true,
+  "createdBy": "OWNER | MANAGER",         // Who entered the data
+
+}
+
+
+   b) For sub-services included in Customer Service Pack::
+
+customerServicePackItems
+{
+  "ownerUserNo": "001",                        
+  "customerNo": "aaa001",
+  "packName": "SP-01",              
+  "subServiceCode": "ref_to_subservice_doc",        // Links to master sub-service catalog
+  "rate": 2000,                                   // Actual rate of sub-service
+  "discount": 20,                                 // Discount offered for this sub-service
+  "finalPrice": 1600,                             // Rate after discount
+   "allowedCount": 3,                             // Number of times service can be availed
+  "allowedUnlimited": false,                             // Checkbox for unlimited usage of sub-service
+  "availedCount" : 0,                               // Initial value zero, incremented on availing this sub-service
+  "coinsToImpart": 10,                            // Coins given when availed
+  "enteredBy": "OWNER | MANAGER",                 // Tracks who entered the record
+  "active": true
+}
+
+
+15. Utilization of Service Pack by Customer (Entries allowed by Salon Owner and Manager Both)
+    a) When a customer visits Salon and utilizes a service pack allotted to him/her, open a screen accepting customer number..
+    b) Customer number will be accepted then UI will present screens for ii) Utlilization of  membership services ii) Display of service packs details
+    c) Customer Service pack Name to  be accepted. For Display of service packs details, UI may also accept option for displaying details of all service packs of this customer.
+    d) For Utlilization of  membership services, date of visit may be accepted (To be displayed as current date initially)
+    e) UI will display the services availed already of this pack by this customer, their cost (original and after discount), total coins availed already and the balance services available along with the balance,if any. balance amount will be offer price minus amount spent already.
+    f) UI should accept sub-services availed on the current visit and display cost of the sub-services availed on the current visit, coins availed of the sub-service,  total coins availed  and display  the balance amount available or balance services available.
+   g) Date of Visit will be the current date, but editable for making past entries. Time may also be accepted
+   h) After the visit, coins earned may be added to the fields i) coins earned for the sub-service ii) total coins earned field for the said service pack.
+   i) After the visit,  sub-service price may be added to the  total amount spent field for the said service pack.   
+   j) After the visit,  counter for availed sub-services (availedCount) may be incremented    
+  k) Counter for number of sub-services allowed (allowedCount) or unlimited sub-services allowed flag (allowedUnlimited) to be checked against availed sub-services Count (availedCount) and appropriate message be given, if all sub-services availed.
+ l) An entry will be made in database, whether data was entered by Owner or Manager.
+ m) Provision for Modification/Deletion/View of Record  by Owner login only.
+   n) After the current services visit, For Type 2 service pack, if the balance is below 20% of the total cost or For Type 1 service pack, number of services left are below 20% of total services under the pack , it should alert the Saloon Manager/Owner for followup with the customer for purchase of more Service Packs and a email be sent to the Saloon Owner alerting for followup with the customer.
+   o) There should be option of Sharing the service pack with the customer containing all the fields of the service pack and availed services. Option of Email/Text Message/Whatsapp be accepted from Customer
+   p) When a Customer Service Pack is to be selected for utilization, it should be active and not expired. For this following checks to be applied for Customer Service Pack:-
+     i) current date to be more than startDate
+    ii) Either expiryDate is null or current date is not more than expiryDate 
+   iii) Customer Service Pack is not deactivated.
+
+
+16. Suggested database schemas samples:
+
+a)   For Utilization of Customer Service Pack
+
+servicePackUtilization=
+{
+  "ownerUserNo": "001",                        
+  "customerNo": "aaa001",
+  "packName": "SP-01",              
+  "dateOfVisit": "2026-05-13",
+  "timeOfVisit": "18:00",
+  "subServicesAvailed": [
+    {
+      "subServiceCode": "ref_to_subservice_doc",
+      "coinsEarned": 10
+    }
+  ],
+  "remarks": "abcdefgh.......",
+  "totalCoinsEarnedTillDate": 10,
+  "totalAmountSpentTillDate": 1600,
+  "enteredBy": "OWNER | MANAGER",
+  "editableBy": "OWNER",                  // Restricts modification/deletion
+  }
+
+
+17. Building Another Additional Master Data for the Salon only by Salon Owner/Manager in Data Management Section
+  a) Salon Owner's Shop image will be accepted and its image file name will be stored in the field shop_image in Salon Owner user's record. This image file will be in Salon Owner's user folder name directory  under directory where html file resides. This Image file Not to be stored in the database. 
+  b) A background image file for  Salon Owner's home image will be accepted and its image file name will be stored in the field bckGround_image in Salon Owner user's record. This image file will be  in Salon Owner's user folder name directory  under directory where html file resides. This Image file Not to be stored in the database. 
+  c) For promotion of Common Service Packs, there will be a separate table which will contain fields for Salon Owner User no, Common Service Pack Id,  Common Service Pack Name, image file name. Common Service Pack Id  jointly with  Owner User No, date of uploading the file will be primary key. For dropdowns, Common Service Pack Ids,  Common Service Pack Names will be displayed. These image files will be uploaded  in Salon Owner's user folder name directory  under directory where html file resides. These Image files Not to be stored in the database. 
+  d) For promotion of Seasonal/Special discounts, there will be a separate table which will contain fields for Salon Owner User no, Discounts  Id,  Discounts Discounts  Id  jointly with  Owner User No, date of uploading the file will be primary key. For dropdowns, Discounts  Ids,  Discounts  Id Names will be displayed. These image files will be uploaded  in Salon Owner's user folder name directory  under directory where html file resides. These Image files Not to be stored in the database. 
+ e) Whenever an existing Customer Service Pack is to be archived, expiry date be updated (current date will be displayed for expiry date, but will be editable)  and cannot be null.
+ f) Whenever any Category/Service/Sub-service/Common Service Pack/Discount/User/Customer Service Pack  on Seasonal/Special Occasion is added/Modified/Deleted/Archived, an email will be sent to the Salon Owner. 
+ 
+
+                           
+18. Suggested database schemas samples:
+  a) For promotion of Common Service Packs 
+
+promotionServicePack=
+{
+ "promoId": "auto_uid",
+  "packId": "aaa01",
+  "ownerUserNo": "001",
+  "imageFileName": "bridal_pack.png",   // stored in Salon Owner’s folder, not DB
+  "uploadedAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+
+  b) For promotion of Seasonal/Special Discounts:
+ 
+promotionDiscount =
+{
+ "promoId": "auto_uid",
+  "discountId": "aaa01",
+  "ownerUserNo": "001",
+  "imageFileName": "diwalipack.png",   // stored in Salon Owner’s folder, not DB
+  "uploadedAt": "2026-05-13T18:20:00Z" // Current date, non-editable
+
+}
+
+ 
+19. Access Logs will be created which will track who granted/revoked rights. Suggested database schema sample will be as follows:
+
+accessLog=
+{
+  "logId": "auto_uid",
+  "ownerUserNo": "001",
+  "managerUserId": "ref_to_manager_doc",
+  "rightChanged": "createServicePack",
+  "newValue": false,
+  "changedBy": "OWNER",
+  "changedAt": "2026-05-13T18:40:00Z"
+}
+
+   
+20. Salon Home page will  display 
+    a)  Shop's Image on the Top of Home Page
+    b) Then, a Display Card for Upcoming Seasons/Special Occasions and Discount Offers, if any. 
+    c) Then Display Cards for Common Service Packs to be displayed across the reamining User screen. In case they do not fit the screen, then these be displayed in a Round Robin Fashion.
+
+21). Access rights for Salon Owner, Salon Manager, Customers
+ a) Salon Owner can access the whole data under its user account and not of the other Salon Owners
+ b) Salon owner to grant or revoke write access rights, if required, to a Salon Manager for a) Allotment/creation of Service Pack to Customer b) Utilization of a Service Pack by Customer c) Common Service Packs creation d) Creation/Modification/Deletion of Service Category or Service or Sub-Service e) Modification in Salon Owner's Shop image h) Modification in Salon Owner's background image i) Modification in Common Service Packs promotional material Images
+ c) After Service Packs are created, Salon owner to give readonly access rights to Salon Managers for a) Common Service Packs b) Customer Service Packs 
+    
+
+22. Suggested database schema sample for errorLogs :
+
+errorLog=    
+{
+  "errorId": "auto_uid",
+  "ownerUserNo": "001",
+   "errorMessage": "Syntax Error ",
+  "timestamp": "2026-05-13T18:50:00Z", // Current date, non-editable
+  "notifiedSuperUser": true
+}
+
+23. For Email services, configuration file for Email provider is as follows :-
+ 
+const EMAILJS_SERVICE  = 'service_050166';
+const EMAILJS_TEMPLATE = 'template_050166';
+const EMAILJS_KEY      = 'hWr0F4DVvhcHN3D5v';
+emailjs.init(EMAILJS_KEY);
+
+24 . As the data is being stored in Firebase, the configuration for the Firebase will be as follows :-
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDQO_LSnflOgA5H-Nz95eIksx94BhlZP_c",
+  authDomain: "vault-050166.firebaseapp.com",
+  projectId: "vault-050166",
+  storageBucket: "vault-050166.firebasestorage.app",
+  messagingSenderId: "252753845895",
+  appId: "1:252753845895:web:0def3dc427df7938c12222",
+  measurementId: "G-4XEPZ5S45V"
+};
