@@ -216,6 +216,7 @@ async function processSecureProfileAuthentication() {
         alert("We encountered a small connection problem while signing you in. Please try again in a moment.");
     }
 }
+
 function renderAuthorizedWorkspaceSession() {
     document.getElementById("nav-logout").classList.remove("d-none");
     document.getElementById("nav-dashboard").classList.remove("d-none");
