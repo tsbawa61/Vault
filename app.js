@@ -801,6 +801,7 @@ async function loadWorkspaceDropdownMappings() {
     await populateSelect("commonServicePacks", "allot-pack-select", "packName", "packName");
     await populateSelect("users", "allot-customer-select", "userNo", "name", "CUSTOMER");
     await populateSelect("users", "utilize-customer-select", "userNo", "name", "CUSTOMER");
+    await populateSelect("subServices", "sub-select-existing", "subServiceCode", "subServiceName");
 }
 
 function setupMediaPreviewListener(inputId, imgId) {
