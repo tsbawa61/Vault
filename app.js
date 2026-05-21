@@ -89,6 +89,45 @@ function initViewRouterLinks() {
     // Automated reactive lookups processing links
     document.getElementById("utilize-customer-select").addEventListener("change", updateCustomerAllottedPacksDropdown);
     document.getElementById("utilize-pack-select").addEventListener("change", renderUtilizeSubServicesCheckboxes);
+
+    // Paste this inside your setup area (like inside your initViewRouterLinks function)
+    // Listener on that new dropdown. If it's empty, it treats the form as a fresh entry. 
+    // If an item is picked, it instantly fills out every single field on that card for the salon worker to review:
+
+    document.getElementById("sub-select-existing").addEventListener("change", async (e) => {
+        const selectedCode = e.target.value;
+        
+        // IF BLANK: The worker wants to add a brand-new service item
+        if (!selectedCode) {
+            document.getElementById("frm-adm-subservice").reset();
+            document.getElementById("sub-active").checked = true; // Default new items to active
+            return;
+        }
+
+        try {
+            // IF SELECTED: Fetch the item's entire file from your database
+            const q = query(
+                collection(db, "subServices"), 
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo), 
+                where("subServiceCode", "==", selectedCode)
+            );
+            const res = await getDocs(q);
+            
+            if (!res.empty) {
+                const itemData = res.docs[0].data();
+                
+                // Display ALL existing values instantly so the salon worker can see them
+                document.getElementById("sub-parent-srv").value = itemData.serviceCode;
+                document.getElementById("sub-name").value = itemData.subServiceName;
+                document.getElementById("sub-rate").value = itemData.rate;                 // Displays existing Price
+                document.getElementById("sub-duration").value = itemData.durationMinutes; // Displays existing Time
+                document.getElementById("sub-active").checked = itemData.active;          // Displays existing Status (On/Off)
+            }
+        } catch (err) {
+            await handleTelemetryAlert("Dropdown Auto-Fill Error", err);
+        }
+    });
+
 }
 
 function showActiveFrame(sectionId) {
@@ -444,30 +483,10 @@ async function processServiceADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("Service Storage Submission Pipeline", err); }
 }
 
-async function processSubServiceADMFormSubmission(e) {
-    e.preventDefault();
-    const parentSrv = document.getElementById("sub-parent-srv").value;
-    const name = document.getElementById("sub-name").value.trim();
-    const rate = document.getElementById("sub-rate").value;
-    const duration = document.getElementById("sub-duration").value;
-    const activeFlag = document.getElementById("sub-active").checked;
-
-    try {
-        const nextCode = String(await getHighestFieldOffset("subServices", "subServiceCode") + 1).padStart(3, "0");
-        await setDoc(doc(db, "subServices", `${activeSessionUser.ownerUserNo}_SUB_${nextCode}`), {
-            ownerUserNo: activeSessionUser.ownerUserNo, subServiceCode: nextCode, subServiceName: name, serviceCode: parentSrv,
-            rate: Number(rate), durationMinutes: Number(duration), active: activeFlag, createdBy: activeSessionUser.role,
-            startDate: new Date().toISOString().split("T")[0], expiryDate: null, createdAt: new Date().toISOString()
-        });
-        document.getElementById("frm-adm-subservice").reset();
-        alert("Success: Individual menu item price details saved successfully.");
-        refreshAllAdministrativeTables();
-        renderCatalogSubServicesCheckboxes();
-    } catch(err) { await handleTelemetryAlert("Sub-Service Storage Submission Pipeline", err); }
-}
 
 async function processCommonPackADMFormSubmission(e) {
     e.preventDefault();
+    
     const nameId = document.getElementById("pack-name-id").value.trim();
     const type = document.getElementById("pack-type-select").value;
     const price = document.getElementById("pack-price").value;
