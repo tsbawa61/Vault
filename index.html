@@ -205,29 +205,43 @@
             <div class="card mb-4">
                 <div class="card-header bg-secondary text-white fw-bold">Step 3: Add Individual Service Item (e.g., Root Touch-up, Fruit Facial)</div>
                 <div class="card-body">
-                    <form id="frm-adm-subservice">
+                    <form id="frm-adm-subservice"> 
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="sub-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove an Item, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="sub-select-existing">
+                                <option value="">-- Creating a Brand New Item --</option>
+                                </select>
+                            <div class="form-text text-muted small">Leave this blank if you are adding a fresh item.</div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Belongs to Service Group</label>
                             <select class="form-select" id="sub-parent-srv" required></select>
                         </div>
+
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Item Name</label>
                             <input type="text" class="form-control" id="sub-name" placeholder="e.g., Root Touch-up" required>
                         </div>
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Price ($)</label>
-                                <input type="number" class="form-control" id="sub-rate" placeholder="0.00" required>
+                                <label class="form-label small fw-bold">Price (Rs)</label>
+                                <input type="number" class="form-control" id="sub-rate" placeholder="e.g. 0" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Duration (Minutes)</label>
-                                <input type="number" class="form-control" id="sub-duration" placeholder="e.g., 45" required>
+                                <input type="number" class="form-control" id="sub-duration" placeholder="e.g. 45" required>
                             </div>
                         </div>
+                        
                         <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" id="sub-active" checked>
                             <label class="form-check-label small" for="sub-active">Make active on menu card</label>
                         </div>
+                        
                         <button type="submit" class="btn btn-secondary btn-sm">Save Individual Service Item</button>
                     </form>
                 </div>
