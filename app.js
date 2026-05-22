@@ -94,40 +94,61 @@ function initViewRouterLinks() {
     // Listener on that new dropdown. If it's empty, it treats the form as a fresh entry. 
     // If an item is picked, it instantly fills out every single field on that card for the salon worker to review:
 
+    // Paste this updated handler inside your initViewRouterLinks function
     document.getElementById("sub-select-existing").addEventListener("change", async (e) => {
         const selectedCode = e.target.value;
         
-        // IF BLANK: The worker wants to add a brand-new service item
+        // IF BLANK: Clear out the form for a brand-new entry
         if (!selectedCode) {
             document.getElementById("frm-adm-subservice").reset();
-            document.getElementById("sub-active").checked = true; // Default new items to active
+            document.getElementById("sub-active").checked = true; 
             return;
         }
-
+    
         try {
-            // IF SELECTED: Fetch the item's entire file from your database
+            // Query the subServices collection
+            const subServicesRef = collection(db, "subServices");
             const q = query(
-                collection(db, "subServices"), 
+                subServicesRef, 
                 where("ownerUserNo", "==", activeSessionUser.ownerUserNo), 
                 where("subServiceCode", "==", selectedCode)
             );
-            const res = await getDocs(q);
+            let res = await getDocs(q);
+            
+            // Fallback: If it returns empty, try matching it as a parsed number 
+            // in case your DB records stored it as a number type
+            if (res.empty && !isNaN(selectedCode)) {
+                const fallbackQ = query(
+                    subServicesRef,
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("subServiceCode", "==", Number(selectedCode))
+                );
+                res = await getDocs(fallbackQ);
+            }
             
             if (!res.empty) {
                 const itemData = res.docs[0].data();
                 
-                // Display ALL existing values instantly so the salon worker can see them
-                document.getElementById("sub-parent-srv").value = itemData.serviceCode;
-                document.getElementById("sub-name").value = itemData.subServiceName;
-                document.getElementById("sub-rate").value = itemData.rate;                 // Displays existing Price
-                document.getElementById("sub-duration").value = itemData.durationMinutes; // Displays existing Time
-                document.getElementById("sub-active").checked = itemData.active;          // Displays existing Status (On/Off)
+                // Explicitly map properties safely into your text form controls
+                document.getElementById("sub-parent-srv").value = itemData.serviceCode || "";
+                document.getElementById("sub-name").value = itemData.subServiceName || "";
+                document.getElementById("sub-rate").value = itemData.rate !== undefined ? itemData.rate : "";
+                document.getElementById("sub-duration").value = itemData.durationMinutes || "";
+                
+                // Explicitly set the checkbox state
+                document.getElementById("sub-active").checked = itemData.active === true;
+            } else {
+                console.warn(`No sub-service data document matched code sequence: ${selectedCode}`);
             }
         } catch (err) {
-            await handleTelemetryAlert("Dropdown Auto-Fill Error", err);
+            // Routes the telemetry exception cleanly using your errorMailer module
+            if (typeof handleTelemetryAlert === "function") {
+                await handleTelemetryAlert("Dropdown Auto-Fill Error", err);
+            } else {
+                console.error("Autofill processing link crashed:", err);
+            }
         }
     });
-
 }
 
 function showActiveFrame(sectionId) {
