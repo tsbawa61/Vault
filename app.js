@@ -77,7 +77,7 @@ function initViewRouterLinks() {
     // Core Administrative Entity Lifecycle Pipelines
     document.getElementById("frm-adm-category").addEventListener("submit", processCategoryADMFormSubmission);
     document.getElementById("frm-adm-service").addEventListener("submit", processServiceADMFormSubmission);
-    document.getElementById("frm-adm-subservice").addEventListener("submit", processSubServiceADMFormSubmission);
+    document.getElementById("frm-adm-subservice").addEventListener("submit", processSubServiceFormSubmission);
     document.getElementById("frm-adm-commonpack").addEventListener("submit", processCommonPackADMFormSubmission);
     document.getElementById("frm-adm-user-profile").addEventListener("submit", processUserADMFormSubmission);
     document.getElementById("frm-allot-membership").addEventListener("submit", processAllotmentFormSubmission);
@@ -90,15 +90,18 @@ function initViewRouterLinks() {
     document.getElementById("utilize-customer-select").addEventListener("change", updateCustomerAllottedPacksDropdown);
     document.getElementById("utilize-pack-select").addEventListener("change", renderUtilizeSubServicesCheckboxes);
 
-    // Paste this inside your setup area (like inside your initViewRouterLinks function)
     // Listener on that new dropdown. If it's empty, it treats the form as a fresh entry. 
     // If an item is picked, it instantly fills out every single field on that card for the salon worker to review:
 
     // Paste this updated handler inside your initViewRouterLinks function
+    // STRICT DATA RETRIEVAL LOGIC WITH INTEGRATED DELETE HOOK
     document.getElementById("sub-select-existing").addEventListener("change", async (e) => {
-        const selectedCode = e.target.value;
+        const selectedCode = e.target.value ? e.target.value.trim() : "";
         
-        // IF BLANK: Clear out the form for a brand-new entry
+        // Remove any old delete button from previous selections
+        const oldDelBtn = document.getElementById("btn-dynamic-sub-delete");
+        if (oldDelBtn) oldDelBtn.remove();
+        
         if (!selectedCode) {
             document.getElementById("frm-adm-subservice").reset();
             document.getElementById("sub-active").checked = true; 
@@ -106,47 +109,85 @@ function initViewRouterLinks() {
         }
     
         try {
-            // Query the subServices collection
             const subServicesRef = collection(db, "subServices");
-            const q = query(
+            
+            // Query 1: Clean string lookup (e.g. "058")
+            let q = query(
                 subServicesRef, 
                 where("ownerUserNo", "==", activeSessionUser.ownerUserNo), 
                 where("subServiceCode", "==", selectedCode)
             );
             let res = await getDocs(q);
             
-            // Fallback: If it returns empty, try matching it as a parsed number 
-            // in case your DB records stored it as a number type
+            // Query 2 Fallback: Numeric code conversion lookup (e.g. 58)
             if (res.empty && !isNaN(selectedCode)) {
-                const fallbackQ = query(
+                q = query(
                     subServicesRef,
                     where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
                     where("subServiceCode", "==", Number(selectedCode))
                 );
-                res = await getDocs(fallbackQ);
+                res = await getDocs(q);
             }
             
             if (!res.empty) {
-                const itemData = res.docs[0].data();
+                const targetDoc = res.docs[0];
+                const itemData = targetDoc.data();
                 
-                // Explicitly map properties safely into your text form controls
+                // Map values cleanly to individual form text elements
                 document.getElementById("sub-parent-srv").value = itemData.serviceCode || "";
                 document.getElementById("sub-name").value = itemData.subServiceName || "";
                 document.getElementById("sub-rate").value = itemData.rate !== undefined ? itemData.rate : "";
                 document.getElementById("sub-duration").value = itemData.durationMinutes || "";
-                
-                // Explicitly set the checkbox state
                 document.getElementById("sub-active").checked = itemData.active === true;
+
+                // PLUG IN RED DELETE BUTTON
+                const formEl = document.getElementById("frm-adm-subservice");
+                const saveBtn = formEl.querySelector("button[type='submit']");
+                
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.id = "btn-dynamic-sub-delete";
+                deleteBtn.className = "btn btn-danger btn-sm d-block w-100 mt-2 fw-bold";
+                deleteBtn.innerText = "🗑️ Delete Item Permanently";
+                
+                // Deletion Pipeline Implementation
+                deleteBtn.addEventListener("click", async () => {
+                    if (confirm(`Are you absolutely sure you want to permanently delete "${itemData.subServiceName}"? This action cannot be reversed.`)) {
+                        try {
+                            const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+                            await deleteDoc(targetDoc.ref);
+                            alert("Success: The item has been completely removed from the menu configuration.");
+                            
+                            formEl.reset();
+                            document.getElementById("sub-active").checked = true;
+                            if (document.getElementById("btn-dynamic-sub-delete")) {
+                                document.getElementById("btn-dynamic-sub-delete").remove();
+                            }
+                            
+                            refreshAllAdministrativeTables();
+                            loadWorkspaceDropdownMappings();
+                            renderCatalogSubServicesCheckboxes();
+                        } catch (delErr) {
+                            console.error("Deletion process fault trace:", delErr);
+                            alert("Failed to drop record item from database execution context.");
+                        }
+                    }
+                });
+                
+                saveBtn.parentNode.appendChild(deleteBtn);
             } else {
-                console.warn(`No sub-service data document matched code sequence: ${selectedCode}`);
+                console.warn(`No collection record matched code signature: ${selectedCode}`);
             }
         } catch (err) {
-            // Routes the telemetry exception cleanly using your errorMailer module
-            if (typeof handleTelemetryAlert === "function") {
-                await handleTelemetryAlert("Dropdown Auto-Fill Error", err);
+            console.error("Autofill mapping pipeline runtime failure:", err);
+        }
+    });                
+                saveBtn.parentNode.appendChild(deleteBtn);
             } else {
-                console.error("Autofill processing link crashed:", err);
+                console.warn(`No catalog service document matches the sequence key: ${selectedCode}`);
             }
+        } catch (err) {
+            console.error("Autofill processing failure:", err);
         }
     });
 }
@@ -504,6 +545,54 @@ async function processServiceADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("Service Storage Submission Pipeline", err); }
 }
 
+async function processSubServiceFormSubmission(e) {
+    e.preventDefault();
+    
+    const existingCode = document.getElementById("sub-select-existing").value;
+    const parentSrv = document.getElementById("sub-parent-srv").value;
+    const name = document.getElementById("sub-name").value.trim();
+    const rate = document.getElementById("sub-rate").value;
+    const duration = document.getElementById("sub-duration").value;
+    const activeFlag = document.getElementById("sub-active").checked;
+
+    try {
+        let targetCode = existingCode;
+        let isNewItem = false;
+
+        if (!targetCode) {
+            isNewItem = true;
+            targetCode = String(await getHighestFieldOffset("subServices", "subServiceCode") + 1).padStart(3, "0");
+        }
+
+        await setDoc(doc(db, "subServices", `${activeSessionUser.ownerUserNo}_SUB_${targetCode}`), {
+            ownerUserNo: activeSessionUser.ownerUserNo,
+            subServiceCode: targetCode,
+            subServiceName: name,
+            serviceCode: parentSrv,
+            rate: Number(rate),
+            durationMinutes: Number(duration),
+            active: activeFlag,
+            createdBy: activeSessionUser.role,
+            startDate: new Date().toISOString().split("T")[0],
+            expiryDate: null,
+            createdAt: new Date().toISOString()
+        });
+
+        alert(isNewItem ? `✨ Success: "${name}" added to menu!` : `✅ Success: Changes saved.`);
+
+        document.getElementById("frm-adm-subservice").reset();
+        document.getElementById("sub-active").checked = true;
+        
+        const oldDelBtn = document.getElementById("btn-dynamic-sub-delete");
+        if (oldDelBtn) oldDelBtn.remove();
+        
+        refreshAllAdministrativeTables();
+        loadWorkspaceDropdownMappings();
+        renderCatalogSubServicesCheckboxes();
+    } catch(err) { 
+        console.error("Subservice storage execution breakdown:", err); 
+    }
+}
 
 async function processCommonPackADMFormSubmission(e) {
     e.preventDefault();
