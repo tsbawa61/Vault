@@ -46,7 +46,7 @@ function removeCatalogDeleteButton(buttonId) {
     if (oldBtn) oldBtn.remove();
 }
 
-function appendCatalogDeleteButton({ formId, buttonId, itemName, targetDocRef, onDeleted }) {
+function appendCatalogDeleteButton({ formId, buttonId, itemName, targetDocRef, onDeleted, preDeleteConfirm }) {
     const formEl = document.getElementById(formId);
     const saveBtn = formEl.querySelector("button[type='submit']");
     removeCatalogDeleteButton(buttonId);
@@ -57,9 +57,10 @@ function appendCatalogDeleteButton({ formId, buttonId, itemName, targetDocRef, o
     deleteBtn.className = "btn btn-danger btn-sm d-block w-100 mt-2 fw-bold";
     deleteBtn.innerText = "🗑️ Delete Item Permanently";
     deleteBtn.addEventListener("click", async () => {
-        if (!confirm(`Are you absolutely sure you want to permanently delete "${itemName}"? This action cannot be reversed.`)) {
-            return;
-        }
+        const proceed = preDeleteConfirm
+            ? await preDeleteConfirm()
+            : confirm(`Are you absolutely sure you want to permanently delete "${itemName}"? This action cannot be reversed.`);
+        if (!proceed) return;
         try {
             await deleteDoc(targetDocRef);
             alert("Success: The item has been completely removed from the menu configuration.");
@@ -104,6 +105,101 @@ document.addEventListener("DOMContentLoaded", () => {
             if (e.target.matches(".chk-pack-subservice")) {
                 updatePackSubServicesRunningSum();
             }
+        });
+    }
+
+    const packSubSearch = document.getElementById("pack-subservices-search");
+    if (packSubSearch) {
+        packSubSearch.addEventListener("input", () => {
+            const term = packSubSearch.value.toLowerCase().trim();
+            document.querySelectorAll("#container-pack-subservices .form-check").forEach(item => {
+                const label = item.querySelector("label");
+                const text = label ? label.textContent.toLowerCase() : "";
+                item.style.display = term === "" || text.includes(term) ? "" : "none";
+            });
+        });
+    }
+
+    const allotCustSearch = document.getElementById("allot-customer-search");
+    if (allotCustSearch) {
+        allotCustSearch.addEventListener("input", () => {
+            const term = allotCustSearch.value.toLowerCase().trim();
+            const sel = document.getElementById("allot-customer-select");
+            if (!sel || !sel._allOptions) return;
+            const prevVal = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(opt => {
+                if (term === "" || opt.text.toLowerCase().includes(term)) {
+                    sel.appendChild(opt.cloneNode(true));
+                }
+            });
+            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+        });
+    }
+
+    const utilizeCustSearch = document.getElementById("utilize-customer-search");
+    if (utilizeCustSearch) {
+        utilizeCustSearch.addEventListener("input", () => {
+            const term = utilizeCustSearch.value.toLowerCase().trim();
+            const sel = document.getElementById("utilize-customer-select");
+            if (!sel || !sel._allOptions) return;
+            const prevVal = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(opt => {
+                if (term === "" || opt.text.toLowerCase().includes(term)) {
+                    sel.appendChild(opt.cloneNode(true));
+                }
+            });
+            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+            sel.dispatchEvent(new Event("change"));
+        });
+    }
+
+    // Search for sub-select-existing (sub-services dropdown)
+    const subSelectSearch = document.getElementById("sub-select-search");
+    if (subSelectSearch) {
+        subSelectSearch.addEventListener("input", () => {
+            const term = subSelectSearch.value.toLowerCase().trim();
+            const sel = document.getElementById("sub-select-existing");
+            if (!sel || !sel._allOptions) return;
+            const prevVal = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(opt => {
+                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
+            });
+            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+        });
+    }
+
+    // Search for sub-parent-srv (main service dropdown)
+    const subParentSearch = document.getElementById("sub-parent-srv-search");
+    if (subParentSearch) {
+        subParentSearch.addEventListener("input", () => {
+            const term = subParentSearch.value.toLowerCase().trim();
+            const sel = document.getElementById("sub-parent-srv");
+            if (!sel || !sel._allOptions) return;
+            const prevVal = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(opt => {
+                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
+            });
+            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+        });
+    }
+
+    // Search for usr-select-existing (users dropdown)
+    const usrSelectSearch = document.getElementById("usr-select-search");
+    if (usrSelectSearch) {
+        usrSelectSearch.addEventListener("input", () => {
+            const term = usrSelectSearch.value.toLowerCase().trim();
+            const sel = document.getElementById("usr-select-existing");
+            if (!sel || !sel._allOptions) return;
+            const prevVal = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(opt => {
+                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
+            });
+            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
         });
     }
 
@@ -174,7 +270,12 @@ function initViewRouterLinks() {
     document.getElementById("nav-home").addEventListener("click", () => showActiveFrame("sec-home"));
     document.getElementById("nav-login").addEventListener("click", () => showActiveFrame("sec-login"));
     document.getElementById("nav-dashboard").addEventListener("click", () => showActiveFrame("sec-dashboard"));
-    document.getElementById("nav-adm-catalog").addEventListener("click", () => showActiveFrame("sec-adm-catalog"));
+    document.getElementById("nav-adm-catalog").addEventListener("click", () => {
+        showActiveFrame("sec-adm-catalog");
+        document.getElementById("frm-adm-subservice").reset();
+        document.getElementById("sub-active").checked = true;
+        removeCatalogDeleteButton("btn-dynamic-sub-delete");
+    });
     document.getElementById("nav-adm-packs").addEventListener("click", () => showActiveFrame("sec-adm-packs"));
     document.getElementById("nav-adm-users").addEventListener("click", () => showActiveFrame("sec-adm-users"));
     document.getElementById("nav-logout").addEventListener("click", performSessionLogoutAction);
@@ -340,7 +441,26 @@ function initViewRouterLinks() {
                     removeCatalogDeleteButton("btn-dynamic-usr-delete");
                     refreshAllAdministrativeTables();
                     loadWorkspaceDropdownMappings();
-                }
+                },
+                preDeleteConfirm: itemData.role === "OWNER"
+                    ? () => {
+                        if (!confirm(
+                            `⚠️ WARNING: You are about to delete the Owner profile "${itemData.name || selectedUserNo}".
+
+` +
+                            `All data linked to this owner (sub-services, packages, customer profiles, visit logs) ` +
+                            `will NOT be automatically removed from the database — it must be cleaned up manually.
+
+` +
+                            `Are you sure you want to proceed?`
+                        )) return false;
+                        return confirm(
+                            `Final confirmation: Permanently delete Owner "${itemData.name || selectedUserNo}"?
+
+This cannot be undone.`
+                        );
+                    }
+                    : undefined
             });
         } catch (err) {
             console.error("User profile autofill mapping pipeline runtime failure:", err);
@@ -455,12 +575,29 @@ function showActiveFrame(sectionId) {
     if (targetSection) targetSection.classList.add("active");
 }
 
-function startSessionWatchdog() {
+function resetSessionWatchdog() {
     if (sessionWatchdogTimer) clearTimeout(sessionWatchdogTimer);
     sessionWatchdogTimer = setTimeout(() => {
         alert("Security Lockout: You have been signed out automatically due to 15 minutes of inactivity.");
         performSessionLogoutAction();
     }, INACTIVITY_TIMEOUT_MS);
+}
+
+const ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+
+function startSessionWatchdog() {
+    resetSessionWatchdog();
+    ACTIVITY_EVENTS.forEach(evt =>
+        document.addEventListener(evt, resetSessionWatchdog, { passive: true })
+    );
+}
+
+function stopSessionWatchdog() {
+    if (sessionWatchdogTimer) clearTimeout(sessionWatchdogTimer);
+    sessionWatchdogTimer = null;
+    ACTIVITY_EVENTS.forEach(evt =>
+        document.removeEventListener(evt, resetSessionWatchdog)
+    );
 }
 
 // Wrapper to interface safely with your errorMailer layout rules
@@ -563,6 +700,10 @@ async function processSecureProfileAuthentication() {
 
         // Set successful login session
         activeSessionUser = userDoc;
+        // Owners must use their own userNo as their tenant key, not the creator's ownerUserNo
+        if (activeSessionUser.role === "OWNER") {
+            activeSessionUser = { ...activeSessionUser, ownerUserNo: activeSessionUser.userNo };
+        }
         salonOwnerNameContext = activeSessionUser.role === "OWNER" ? activeSessionUser.name : `Salon Branch [${activeSessionUser.ownerUserNo}]`;
 
         // Load the system
@@ -587,7 +728,8 @@ function renderAuthorizedWorkspaceSession() {
         document.getElementById("btn-trigger-autopopulate").classList.remove("d-none");
     }
 
-    document.getElementById("lbl-active-context").innerText = `Branch ID Layer: ${activeSessionUser.ownerUserNo} | Logged In Role: ${activeSessionUser.role}`;
+    document.getElementById("lbl-active-context").innerText = `Branch ID Layer: ${activeSessionUser.userNo} | Logged In Role: ${activeSessionUser.role} | ${activeSessionUser.name}`;
+    configureUserProfileFormForRole(activeSessionUser.role);
     startSessionWatchdog();
     showActiveFrame("sec-dashboard");
     
@@ -599,7 +741,7 @@ function renderAuthorizedWorkspaceSession() {
 
 function performSessionLogoutAction() {
     if (realtimePacksUnsubscribe) realtimePacksUnsubscribe();
-    if (sessionWatchdogTimer) clearTimeout(sessionWatchdogTimer);
+    stopSessionWatchdog();
     activeSessionUser = null;
     window.location.reload();
 }
@@ -739,6 +881,8 @@ async function renderCatalogSubServicesCheckboxes() {
         const q = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("active", "==", true)); 
         const snap = await getDocs(q);
         
+        const srchBox = document.getElementById("pack-subservices-search");
+        if (srchBox) srchBox.value = "";
         container.innerHTML = "";
         if (snap.empty) {
             container.innerHTML = `<p class="text-danger small my-0">No active menu service items found. Please setup or load standard menus first.</p>`;
@@ -839,6 +983,9 @@ async function processSubServiceFormSubmission(e) {
     const duration = document.getElementById("sub-duration").value;
     const activeFlag = document.getElementById("sub-active").checked;
 
+    if (!parentSrv) return alert("Validation: Please select a Main Service this item belongs to.");
+    if (!name)      return alert("Validation: Please enter a name for this service item.");
+
     try {
         let targetCode = existingCode;
         let isNewItem = false;
@@ -930,6 +1077,26 @@ async function processCommonPackADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("Master Package Creation Node", err); }
 }
 
+function configureUserProfileFormForRole(loggedInRole) {
+    const roleSelect   = document.getElementById("usr-role");
+    const distWrapper  = document.getElementById("usr-distance-wrapper");
+    if (!roleSelect) return;
+    const ownerOption    = roleSelect.querySelector("option[value='OWNER']");
+    const managerOption  = roleSelect.querySelector("option[value='MANAGER']");
+    const customerOption = roleSelect.querySelector("option[value='CUSTOMER']");
+    if (loggedInRole === "SUPER_USER") {
+        if (ownerOption)    ownerOption.hidden    = false;
+        if (managerOption)  managerOption.hidden  = true;
+        if (customerOption) customerOption.hidden = true;
+        if (distWrapper)    distWrapper.hidden     = true;
+    } else {
+        if (ownerOption)    ownerOption.hidden    = true;
+        if (managerOption)  managerOption.hidden  = false;
+        if (customerOption) customerOption.hidden = false;
+        if (distWrapper)    distWrapper.hidden     = false;
+    }
+}
+
 async function processUserADMFormSubmission(e) {
     e.preventDefault();
     const existingUserNo = document.getElementById("usr-select-existing").value;
@@ -940,6 +1107,10 @@ async function processUserADMFormSubmission(e) {
     const email = document.getElementById("usr-email").value.trim().toLowerCase();
     const pass = document.getElementById("usr-password").value;
     const phone = document.getElementById("usr-phone").value.trim();
+
+    if ((role === "MANAGER" || role === "OWNER") && !pass.trim()) {
+        return alert("Validation Error: Password is required for MANAGER and OWNER profiles. Please enter a password before saving.");
+    }
     const dist = document.getElementById("usr-distance").value;
     const addr = document.getElementById("usr-address").value.trim();
     const maps = document.getElementById("usr-mapurl").value.trim();
@@ -954,8 +1125,10 @@ async function processUserADMFormSubmission(e) {
             targetUserNo = String(Math.floor(1000 + Math.random() * 9000));
         }
 
-        await setDoc(doc(db, "users", `${activeSessionUser.ownerUserNo}_USR_${targetUserNo}`), {
-            ownerUserNo: activeSessionUser.ownerUserNo, userNo: targetUserNo, role: role, name: name, sex: sex,
+        // OWNER accounts use their own userNo as their ownerUserNo (tenant key)
+        const recordOwnerUserNo = (role === "OWNER") ? targetUserNo : activeSessionUser.ownerUserNo;
+        await setDoc(doc(db, "users", `${recordOwnerUserNo}_USR_${targetUserNo}`), {
+            ownerUserNo: recordOwnerUserNo, userNo: targetUserNo, role: role, name: name, sex: sex,
             ageGroup: age, email: email, password: pass, phone: phone, distance: dist, address: addr,
             googleMapLink: maps, active: activeFlag, startDate: new Date().toISOString().split("T")[0], createdAt: new Date().toISOString()
         });
@@ -1091,6 +1264,8 @@ async function processAllotmentFormSubmission(e) {
 
         alert("Success: Package has been successfully assigned and logged to this client profile account card.");
         document.getElementById("frm-allot-membership").reset();
+        const _srch = document.getElementById("allot-customer-search");
+        if (_srch) { _srch.value = ""; _srch.dispatchEvent(new Event("input")); }
         allotCurrentPackTotalAmount = 0;
         const previewEl = document.getElementById("allot-pack-preview");
         if (previewEl) previewEl.style.display = "none";
@@ -1152,7 +1327,7 @@ async function updateCustomerAllottedPacksDropdown() {
         packEl.innerHTML = `<option value="">-- Choose Package Ledger Account --</option>`;
         snap.forEach(d => {
             const data = d.data();
-            packEl.innerHTML += `<option value="${data.allotId}">${data.packName} (Remaining Balance: ${data.remainingBalance})</option>`;
+            packEl.innerHTML += `<option value="${data.allotId}">${data.packName} | Allot ID: ${data.allotId} (Remaining Balance: ${data.remainingBalance})</option>`;
         });
     } catch (err) { await handleTelemetryAlert("Dynamic Dropdown Sync Loop", err); }
 }
@@ -1186,6 +1361,15 @@ async function renderUtilizeSubServicesCheckboxes() {
             ? Number(pData.unpaidBalance)
             : (soldPrice !== null && amtReceived !== null ? soldPrice - amtReceived : 0);
         utilizePrevUnpaidBalance = unpaidBalance;
+
+        const isExhausted = Number(pData.remainingBalance) <= 0;
+        const isExpired   = pData.expiryDate && pData.expiryDate !== null;
+        if (isExhausted || isExpired) {
+            let reason = [];
+            if (isExhausted) reason.push(`remaining balance is ${pData.remainingBalance} (exhausted)`);
+            if (isExpired)   reason.push(`package expired on ${pData.expiryDate}`);
+            alert(`⚠️ Package Exhausted / Expired: This package cannot accept further visits — ${reason.join(" and ")}.`);
+        }
 
         if (financialEl) {
             const detailsEl = document.getElementById("utilize-pack-financial-details");
@@ -1314,11 +1498,18 @@ async function processVisitDeductionFormSubmission(e) {
         const newUnpaidBalance = Math.max(0, prevUnpaid - addlAmtReceived);
         const newAmountReceived = prevAmtReceived + addlAmtReceived;
 
-        await updateDoc(docRef, {
+        const nowExhausted = updatedBalance <= 0;
+        const exhaustionUpdate = {
             remainingBalance: updatedBalance,
             unpaidBalance: newUnpaidBalance,
             amountReceived: newAmountReceived
-        });
+        };
+        if (nowExhausted) exhaustionUpdate.expiryDate = visitDate;
+        await updateDoc(docRef, exhaustionUpdate);
+
+        if (nowExhausted) {
+            alert(`⚠️ Package Fully Exhausted: "${pData.packName}" has been fully consumed. Expiry date set to ${visitDate}. No further visits can be logged.`);
+        }
 
         const logIdString = "LOG-" + Math.floor(100000 + Math.random() * 900000);
         await setDoc(doc(db, "serviceUtilizationLogs", `${activeSessionUser.ownerUserNo}_LOG_${logIdString}`), {
@@ -1342,6 +1533,8 @@ async function processVisitDeductionFormSubmission(e) {
         }
 
         document.getElementById("frm-utilize-service-visit").reset();
+        const _uSrch = document.getElementById("utilize-customer-search");
+        if (_uSrch) { _uSrch.value = ""; _uSrch.dispatchEvent(new Event("input")); }
         document.getElementById("container-utilize-subservices").innerHTML = "";
         utilizePrevUnpaidBalance = 0;
         const financialEl = document.getElementById("utilize-pack-financial");
@@ -1372,23 +1565,56 @@ async function refreshAllAdministrativeTables() {
         }
     };
 
-    renderTable("serviceCategories", "tbl-adm-categories", (data) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td><strong>[${data.catCode}]</strong></td><td>${data.catName}</td>`;
-        return tr;
-    });
+    {
+        const catQ = query(collection(db, "serviceCategories"),
+            where("ownerUserNo", "==", ownerId),
+            where("active", "==", true));
+        const catSnap = await getDocs(catQ);
+        const catTbody = document.getElementById("tbl-adm-categories");
+        if (catTbody) {
+            catTbody.innerHTML = "";
+            catSnap.forEach(d => {
+                const data = d.data();
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td><strong>[${data.catCode}]</strong></td><td>${data.catName}</td>`;
+                catTbody.appendChild(tr);
+            });
+        }
+    }
 
-    renderTable("services", "tbl-adm-services", (data) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td><strong>[${data.serviceCode}]</strong></td><td>${data.serviceName}</td>`;
-        return tr;
-    });
+    {
+        const srvQ = query(collection(db, "services"),
+            where("ownerUserNo", "==", ownerId),
+            where("active", "==", true));
+        const srvSnap = await getDocs(srvQ);
+        const srvTbody = document.getElementById("tbl-adm-services");
+        if (srvTbody) {
+            srvTbody.innerHTML = "";
+            srvSnap.forEach(d => {
+                const data = d.data();
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td><strong>[${data.serviceCode}]</strong></td><td>${data.serviceName}</td>`;
+                srvTbody.appendChild(tr);
+            });
+        }
+    }
 
-    renderTable("subServices", "tbl-adm-subservices", (data) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${data.subServiceName}</td><td><strong>$${data.rate}</strong> <span class="text-muted text-xs">(${data.durationMinutes} min)</span></td>`;
-        return tr;
-    });
+    {
+        const ssQ = query(collection(db, "subServices"),
+            where("ownerUserNo", "==", ownerId),
+            where("active", "==", true));
+        const ssSnap = await getDocs(ssQ);
+        const ssTbody = document.getElementById("tbl-adm-subservices");
+        if (ssTbody) {
+            ssTbody.innerHTML = "";
+            ssSnap.forEach(d => {
+                const data = d.data();
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${data.subServiceName}</td><td><strong>₹${data.rate}</strong></td>`;
+                ssTbody.appendChild(tr);
+            });
+        }
+    }
 
     renderTable("commonServicePacks", "tbl-adm-commonpacks", (data) => {
         const tr = document.createElement("tr");
@@ -1437,11 +1663,21 @@ async function refreshAllAdministrativeTables() {
         return tr;
     });
 
-    renderTable("users", "tbl-adm-users", (data) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
-        return tr;
-    });
+    {
+        const usrQ = query(collection(db, "users"),
+            where("ownerUserNo", "==", ownerId));
+        const usrSnap = await getDocs(usrQ);
+        const usrTbody = document.getElementById("tbl-adm-users");
+        if (usrTbody) {
+            usrTbody.innerHTML = "";
+            usrSnap.forEach(d => {
+                const data = d.data();
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
+                usrTbody.appendChild(tr);
+            });
+        }
+    }
 }
 
 async function loadWorkspaceDropdownMappings() {
@@ -1467,7 +1703,19 @@ async function loadWorkspaceDropdownMappings() {
     await populateSelect("serviceCategories", "srv-parent-cat", "catCode", "catName");
     await populateSelect("serviceCategories", "cat-select-existing", "catCode", "catName");
     await populateSelect("services", "srv-select-existing", "serviceCode", "serviceName");
-    await populateSelect("services", "sub-parent-srv", "serviceCode", "serviceName");
+    {
+        const superSrvQ = query(collection(db, "services"), where("createdBy", "==", "SUPER_USER"));
+        const superSrvSnap = await getDocs(superSrvQ);
+        const subParentEl = document.getElementById("sub-parent-srv");
+        if (subParentEl) {
+            subParentEl.innerHTML = `<option value="">-- Choose from Available List --</option>`;
+            superSrvSnap.forEach(d => {
+                const data = d.data();
+                subParentEl.innerHTML += `<option value="${data.serviceCode}">${data.serviceName} (ID: ${data.serviceCode})</option>`;
+            });
+            subParentEl._allOptions = Array.from(subParentEl.options);
+        }
+    }
     {
         const packQ = query(collection(db, "commonServicePacks"), where("ownerUserNo", "==", ownerId));
         const packSnap = await getDocs(packQ);
@@ -1484,7 +1732,15 @@ async function loadWorkspaceDropdownMappings() {
     }
     await populateSelect("commonServicePacks", "pack-select-existing", "packName", "packName");
     await populateSelect("users", "allot-customer-select", "userNo", "name", "CUSTOMER");
+    {
+        const _acEl = document.getElementById("allot-customer-select");
+        if (_acEl) _acEl._allOptions = Array.from(_acEl.options);
+    }
     await populateSelect("users", "utilize-customer-select", "userNo", "name", "CUSTOMER");
+    {
+        const _ucEl = document.getElementById("utilize-customer-select");
+        if (_ucEl) _ucEl._allOptions = Array.from(_ucEl.options);
+    }
 
     const userProfileSelect = document.getElementById("usr-select-existing");
     if (userProfileSelect) {
@@ -1498,6 +1754,14 @@ async function loadWorkspaceDropdownMappings() {
     }
 
     await populateSelect("subServices", "sub-select-existing", "subServiceCode", "subServiceName");
+    {
+        const _subEl = document.getElementById("sub-select-existing");
+        if (_subEl) _subEl._allOptions = Array.from(_subEl.options);
+    }
+    {
+        const _usrEl = document.getElementById("usr-select-existing");
+        if (_usrEl) _usrEl._allOptions = Array.from(_usrEl.options);
+    }
 }
 
 function setupMediaPreviewListener(inputId, imgId) {
