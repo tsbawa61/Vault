@@ -154,54 +154,19 @@ document.addEventListener("DOMContentLoaded", () => {
             sel.dispatchEvent(new Event("change"));
         });
     }
-
-    // Search for sub-select-existing (sub-services dropdown)
-    const subSelectSearch = document.getElementById("sub-select-search");
-    if (subSelectSearch) {
-        subSelectSearch.addEventListener("input", () => {
-            const term = subSelectSearch.value.toLowerCase().trim();
-            const sel = document.getElementById("sub-select-existing");
+    ["sub-select-search/sub-select-existing","sub-parent-srv-search/sub-parent-srv","usr-select-search/usr-select-existing"].forEach(pair => {
+        const [sid, did] = pair.split("/");
+        const si = document.getElementById(sid);
+        if (!si) return;
+        si.addEventListener("input", () => {
+            const term = si.value.toLowerCase().trim();
+            const sel = document.getElementById(did);
             if (!sel || !sel._allOptions) return;
-            const prevVal = sel.value;
-            sel.innerHTML = "";
-            sel._allOptions.forEach(opt => {
-                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
-            });
-            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+            const pv = sel.value; sel.innerHTML = "";
+            sel._allOptions.forEach(o => { if (term === "" || o.text.toLowerCase().includes(term)) sel.appendChild(o.cloneNode(true)); });
+            if ([...sel.options].some(o => o.value === pv)) sel.value = pv;
         });
-    }
-
-    // Search for sub-parent-srv (main service dropdown)
-    const subParentSearch = document.getElementById("sub-parent-srv-search");
-    if (subParentSearch) {
-        subParentSearch.addEventListener("input", () => {
-            const term = subParentSearch.value.toLowerCase().trim();
-            const sel = document.getElementById("sub-parent-srv");
-            if (!sel || !sel._allOptions) return;
-            const prevVal = sel.value;
-            sel.innerHTML = "";
-            sel._allOptions.forEach(opt => {
-                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
-            });
-            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
-        });
-    }
-
-    // Search for usr-select-existing (users dropdown)
-    const usrSelectSearch = document.getElementById("usr-select-search");
-    if (usrSelectSearch) {
-        usrSelectSearch.addEventListener("input", () => {
-            const term = usrSelectSearch.value.toLowerCase().trim();
-            const sel = document.getElementById("usr-select-existing");
-            if (!sel || !sel._allOptions) return;
-            const prevVal = sel.value;
-            sel.innerHTML = "";
-            sel._allOptions.forEach(opt => {
-                if (term === "" || opt.text.toLowerCase().includes(term)) sel.appendChild(opt.cloneNode(true));
-            });
-            if ([...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
-        });
-    }
+    });
 
     const packPriceInput = document.getElementById("pack-price");
     if (packPriceInput) {
@@ -508,6 +473,18 @@ This cannot be undone.`
                 buttonId: "btn-dynamic-pack-delete",
                 itemName: itemData.packName || selectedPackName,
                 targetDocRef: targetDoc.ref,
+                preDeleteConfirm: async () => {
+                    // (d) Block deletion if pack is allotted to any customer
+                    const allotQ = query(collection(db, "customerServicePacks"),
+                        where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                        where("packName",    "==", selectedPackName));
+                    const allotSnap = await getDocs(allotQ);
+                    if (!allotSnap.empty) {
+                        alert(`⚠️ Deletion Blocked: The package "${selectedPackName}" has been allotted to ${allotSnap.size} customer(s) and cannot be deleted.\n\nTo retire this package, create a new one with updated settings and stop selling this one.`);
+                        return false;
+                    }
+                    return confirm(`Are you absolutely sure you want to permanently delete "${itemData.packName || selectedPackName}"? This action cannot be reversed.`);
+                },
                 onDeleted: () => {
                     document.getElementById("frm-adm-commonpack").reset();
                     document.getElementById("pack-active").checked = true;
@@ -582,22 +559,15 @@ function resetSessionWatchdog() {
         performSessionLogoutAction();
     }, INACTIVITY_TIMEOUT_MS);
 }
-
-const ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-
+const ACTIVITY_EVENTS = ["mousemove","keydown","click","scroll","touchstart"];
 function startSessionWatchdog() {
     resetSessionWatchdog();
-    ACTIVITY_EVENTS.forEach(evt =>
-        document.addEventListener(evt, resetSessionWatchdog, { passive: true })
-    );
+    ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, resetSessionWatchdog, { passive: true }));
 }
-
 function stopSessionWatchdog() {
     if (sessionWatchdogTimer) clearTimeout(sessionWatchdogTimer);
     sessionWatchdogTimer = null;
-    ACTIVITY_EVENTS.forEach(evt =>
-        document.removeEventListener(evt, resetSessionWatchdog)
-    );
+    ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, resetSessionWatchdog));
 }
 
 // Wrapper to interface safely with your errorMailer layout rules
@@ -982,10 +952,8 @@ async function processSubServiceFormSubmission(e) {
     const rate = document.getElementById("sub-rate").value;
     const duration = document.getElementById("sub-duration").value;
     const activeFlag = document.getElementById("sub-active").checked;
-
     if (!parentSrv) return alert("Validation: Please select a Main Service this item belongs to.");
     if (!name)      return alert("Validation: Please enter a name for this service item.");
-
     try {
         let targetCode = existingCode;
         let isNewItem = false;
@@ -1029,16 +997,29 @@ async function processCommonPackADMFormSubmission(e) {
     e.preventDefault();
 
     const existingPackName = document.getElementById("pack-select-existing").value;
-    const nameId = document.getElementById("pack-name-id").value.trim();
-    const type = document.getElementById("pack-type-select").value;
-    const price = document.getElementById("pack-price").value;
-    const totalAmt = document.getElementById("pack-total-amt").value;
+    const nameId    = document.getElementById("pack-name-id").value.trim();
+    const type      = document.getElementById("pack-type-select").value;
+    const price     = parseFloat(document.getElementById("pack-price").value) || 0;
+    const totalAmt  = parseFloat(document.getElementById("pack-total-amt").value) || 0;
     const activeFlag = document.getElementById("pack-active").checked;
 
+    // (c) No subservices selected
     const selectedSubServices = [];
-    document.querySelectorAll(".chk-pack-subservice:checked").forEach(input => {
-        selectedSubServices.push(input.value);
-    });
+    document.querySelectorAll(".chk-pack-subservice:checked").forEach(input => selectedSubServices.push(input.value));
+    if (selectedSubServices.length === 0)
+        return alert("Validation: Please select at least one Individual Service Item for this package before saving.");
+
+    // (a) Price validation: must be between 15% and 100% of total
+    if (totalAmt > 0) {
+        const minAllowed = totalAmt * 0.15;
+        if (price > totalAmt) {
+            const go = confirm(`⚠️ Price Alert: The Offered Price (₹${price.toLocaleString("en-IN")}) is above the Total Services Price (₹${totalAmt.toLocaleString("en-IN")}). This means you are charging more than list price.\n\nProceed anyway?`);
+            if (!go) return;
+        } else if (price < minAllowed) {
+            const go = confirm(`⚠️ Price Alert: The Offered Price (₹${price.toLocaleString("en-IN")}) is below 15% of the Total Services Price (₹${totalAmt.toLocaleString("en-IN")}). Minimum suggested price is ₹${minAllowed.toLocaleString("en-IN", {maximumFractionDigits:0})}.\n\nProceed anyway?`);
+            if (!go) return;
+        }
+    }
 
     try {
         let packDocRef;
@@ -1046,18 +1027,30 @@ async function processCommonPackADMFormSubmission(e) {
 
         if (existingPackName) {
             const targetDoc = await fetchOwnerRecordByCode("commonServicePacks", "packName", existingPackName);
-            if (!targetDoc) {
+            if (!targetDoc)
                 return alert("Update blocked: Could not find the selected package in the catalog.");
+
+            // (d) Block modify if pack is already allotted to any customer
+            const allotQ = query(collection(db, "customerServicePacks"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                where("packName",    "==", existingPackName));
+            const allotSnap = await getDocs(allotQ);
+            if (!allotSnap.empty) {
+                return alert(`⚠️ Modification Blocked: The package "${existingPackName}" has already been allotted to ${allotSnap.size} customer(s) and cannot be modified.\n\nTo make changes, please create a new package with the updated settings instead.`);
             }
+
             packDocRef = targetDoc.ref;
         } else {
             isNewItem = true;
             packDocRef = doc(db, "commonServicePacks", `${activeSessionUser.ownerUserNo}_CPACK_${nameId.replace(/\s+/g, "_")}`);
         }
 
+        // (b) setDoc with no merge — fully replaces subServicesArray and all fields
         await setDoc(packDocRef, {
-            ownerUserNo: activeSessionUser.ownerUserNo, packName: nameId, packType: "Type2", offerPrice: Number(price),
-            totalAmount: Number(totalAmt), subServicesArray: selectedSubServices, active: activeFlag, createdAt: new Date().toISOString()
+            ownerUserNo: activeSessionUser.ownerUserNo, packName: nameId, packType: "Type2",
+            offerPrice: price, totalAmount: totalAmt,
+            subServicesArray: selectedSubServices,   // complete replacement
+            active: activeFlag, createdAt: new Date().toISOString()
         });
 
         alert(isNewItem
@@ -1070,7 +1063,6 @@ async function processCommonPackADMFormSubmission(e) {
         const discountEl = document.getElementById("pack-discount-display");
         if (discountEl) discountEl.textContent = "";
         removeCatalogDeleteButton("btn-dynamic-pack-delete");
-
         renderCatalogSubServicesCheckboxes();
         refreshAllAdministrativeTables();
         loadWorkspaceDropdownMappings();
@@ -1078,25 +1070,24 @@ async function processCommonPackADMFormSubmission(e) {
 }
 
 function configureUserProfileFormForRole(loggedInRole) {
-    const roleSelect   = document.getElementById("usr-role");
-    const distWrapper  = document.getElementById("usr-distance-wrapper");
+    const roleSelect = document.getElementById("usr-role");
+    const distWrapper = document.getElementById("usr-distance-wrapper");
     if (!roleSelect) return;
-    const ownerOption    = roleSelect.querySelector("option[value='OWNER']");
-    const managerOption  = roleSelect.querySelector("option[value='MANAGER']");
-    const customerOption = roleSelect.querySelector("option[value='CUSTOMER']");
+    const ownerOpt = roleSelect.querySelector("option[value='OWNER']");
+    const mgrOpt   = roleSelect.querySelector("option[value='MANAGER']");
+    const custOpt  = roleSelect.querySelector("option[value='CUSTOMER']");
     if (loggedInRole === "SUPER_USER") {
-        if (ownerOption)    ownerOption.hidden    = false;
-        if (managerOption)  managerOption.hidden  = true;
-        if (customerOption) customerOption.hidden = true;
-        if (distWrapper)    distWrapper.hidden     = true;
+        if (ownerOpt) ownerOpt.hidden = false;
+        if (mgrOpt)   mgrOpt.hidden   = true;
+        if (custOpt)  custOpt.hidden   = true;
+        if (distWrapper) distWrapper.hidden = true;
     } else {
-        if (ownerOption)    ownerOption.hidden    = true;
-        if (managerOption)  managerOption.hidden  = false;
-        if (customerOption) customerOption.hidden = false;
-        if (distWrapper)    distWrapper.hidden     = false;
+        if (ownerOpt) ownerOpt.hidden = true;
+        if (mgrOpt)   mgrOpt.hidden   = false;
+        if (custOpt)  custOpt.hidden   = false;
+        if (distWrapper) distWrapper.hidden = false;
     }
 }
-
 async function processUserADMFormSubmission(e) {
     e.preventDefault();
     const existingUserNo = document.getElementById("usr-select-existing").value;
@@ -1107,10 +1098,8 @@ async function processUserADMFormSubmission(e) {
     const email = document.getElementById("usr-email").value.trim().toLowerCase();
     const pass = document.getElementById("usr-password").value;
     const phone = document.getElementById("usr-phone").value.trim();
-
-    if ((role === "MANAGER" || role === "OWNER") && !pass.trim()) {
-        return alert("Validation Error: Password is required for MANAGER and OWNER profiles. Please enter a password before saving.");
-    }
+    if ((role === "MANAGER" || role === "OWNER") && !pass.trim())
+        return alert("Validation Error: Password is required for MANAGER and OWNER profiles.");
     const dist = document.getElementById("usr-distance").value;
     const addr = document.getElementById("usr-address").value.trim();
     const maps = document.getElementById("usr-mapurl").value.trim();
@@ -1368,9 +1357,8 @@ async function renderUtilizeSubServicesCheckboxes() {
             let reason = [];
             if (isExhausted) reason.push(`remaining balance is ${pData.remainingBalance} (exhausted)`);
             if (isExpired)   reason.push(`package expired on ${pData.expiryDate}`);
-            alert(`⚠️ Package Exhausted / Expired: This package cannot accept further visits — ${reason.join(" and ")}.`);
+            alert(`⚠️ Package Exhausted/Expired: ${reason.join(" and ")}.`);
         }
-
         if (financialEl) {
             const detailsEl = document.getElementById("utilize-pack-financial-details");
             if (detailsEl) {
@@ -1499,17 +1487,11 @@ async function processVisitDeductionFormSubmission(e) {
         const newAmountReceived = prevAmtReceived + addlAmtReceived;
 
         const nowExhausted = updatedBalance <= 0;
-        const exhaustionUpdate = {
-            remainingBalance: updatedBalance,
-            unpaidBalance: newUnpaidBalance,
-            amountReceived: newAmountReceived
-        };
+        const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance, amountReceived: newAmountReceived };
         if (nowExhausted) exhaustionUpdate.expiryDate = visitDate;
         await updateDoc(docRef, exhaustionUpdate);
-
-        if (nowExhausted) {
-            alert(`⚠️ Package Fully Exhausted: "${pData.packName}" has been fully consumed. Expiry date set to ${visitDate}. No further visits can be logged.`);
-        }
+        if (nowExhausted)
+            alert(`⚠️ Package Fully Exhausted: "${pData.packName}" consumed. Expiry set to ${visitDate}.`);
 
         const logIdString = "LOG-" + Math.floor(100000 + Math.random() * 900000);
         await setDoc(doc(db, "serviceUtilizationLogs", `${activeSessionUser.ownerUserNo}_LOG_${logIdString}`), {
@@ -1754,14 +1736,8 @@ async function loadWorkspaceDropdownMappings() {
     }
 
     await populateSelect("subServices", "sub-select-existing", "subServiceCode", "subServiceName");
-    {
-        const _subEl = document.getElementById("sub-select-existing");
-        if (_subEl) _subEl._allOptions = Array.from(_subEl.options);
-    }
-    {
-        const _usrEl = document.getElementById("usr-select-existing");
-        if (_usrEl) _usrEl._allOptions = Array.from(_usrEl.options);
-    }
+    { const _s = document.getElementById("sub-select-existing"); if (_s) _s._allOptions = Array.from(_s.options); }
+    { const _u = document.getElementById("usr-select-existing"); if (_u) _u._allOptions = Array.from(_u.options); }
 }
 
 function setupMediaPreviewListener(inputId, imgId) {
