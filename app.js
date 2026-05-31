@@ -154,19 +154,30 @@ document.addEventListener("DOMContentLoaded", () => {
             sel.dispatchEvent(new Event("change"));
         });
     }
-    ["sub-select-search/sub-select-existing","sub-parent-srv-search/sub-parent-srv","usr-select-search/usr-select-existing"].forEach(pair => {
-        const [sid, did] = pair.split("/");
-        const si = document.getElementById(sid);
+
+    // Generic search filter helper
+    function wireDropdownSearch(searchId, selectId, dispatchChange) {
+        const si = document.getElementById(searchId);
         if (!si) return;
         si.addEventListener("input", () => {
             const term = si.value.toLowerCase().trim();
-            const sel = document.getElementById(did);
+            const sel  = document.getElementById(selectId);
             if (!sel || !sel._allOptions) return;
-            const pv = sel.value; sel.innerHTML = "";
-            sel._allOptions.forEach(o => { if (term === "" || o.text.toLowerCase().includes(term)) sel.appendChild(o.cloneNode(true)); });
+            const pv   = sel.value;
+            sel.innerHTML = "";
+            sel._allOptions.forEach(o => {
+                if (term === "" || o.text.toLowerCase().includes(term)) sel.appendChild(o.cloneNode(true));
+            });
             if ([...sel.options].some(o => o.value === pv)) sel.value = pv;
+            if (dispatchChange) sel.dispatchEvent(new Event("change"));
         });
-    });
+    }
+    wireDropdownSearch("sub-select-search",      "sub-select-existing",  false);
+    wireDropdownSearch("sub-parent-srv-search",  "sub-parent-srv",       false);
+    wireDropdownSearch("usr-select-search",      "usr-select-existing",  false);
+    wireDropdownSearch("utilize-pack-search",    "utilize-pack-select",  false);
+    wireDropdownSearch("allot-pack-search",      "allot-pack-select",    true);
+    wireDropdownSearch("pack-select-search",     "pack-select-existing", true);
 
     const packPriceInput = document.getElementById("pack-price");
     if (packPriceInput) {
@@ -231,8 +242,54 @@ function updatePackSubServicesRunningSum() {
     }
 }
 
+let _galleryTimer = null;
+function renderHomePage(role) {
+    const sec = document.getElementById("sec-home");
+    if (!sec) return;
+    if (_galleryTimer) { clearInterval(_galleryTimer); _galleryTimer = null; }
+    if (role === "SUPER_USER" || role === "OWNER") {
+        sec.style.backgroundImage = "url('WaterMarkVaultGlamApp.png')";
+        sec.style.backgroundSize = "contain";
+        sec.style.backgroundRepeat = "no-repeat";
+        sec.style.backgroundPosition = "center center";
+        sec.style.minHeight = "70vh";
+    } else {
+        sec.style.backgroundImage = "";
+        sec.style.minHeight = "";
+    }
+    const galleryEl = document.getElementById("home-gallery");
+    if (!galleryEl) return;
+    if (role !== "OWNER") { galleryEl.style.display = "none"; return; }
+    galleryEl.style.display = "block";
+    const images = Array.from({length: 8}, (_, i) => `sample_package_${i + 1}.png`);
+    const pages  = [images.slice(0, 4), images.slice(4, 8)];
+    let pageIdx  = 0;
+    function showPage(idx) {
+        const grid = document.getElementById("home-gallery-grid");
+        if (!grid) return;
+        grid.innerHTML = "";
+        pages[idx].forEach(src => {
+            const col = document.createElement("div");
+            col.className = "col-6";
+            col.innerHTML = `<img src="${src}" alt="" class="img-fluid rounded shadow-sm" style="width:100%;height:200px;object-fit:contain;background:#f8f9fa;">`;
+            grid.appendChild(col);
+        });
+        document.querySelectorAll(".home-gallery-dot").forEach((d, i) => {
+            d.classList.toggle("bg-dark",      i === idx);
+            d.classList.toggle("bg-secondary", i !== idx);
+        });
+    }
+    showPage(0);
+    _galleryTimer = setInterval(() => { pageIdx = (pageIdx + 1) % pages.length; showPage(pageIdx); }, 4000);
+    document.querySelectorAll(".home-gallery-dot").forEach((dot, i) => {
+        dot.addEventListener("click", () => { pageIdx = i; showPage(pageIdx); });
+    });
+}
 function initViewRouterLinks() {
-    document.getElementById("nav-home").addEventListener("click", () => showActiveFrame("sec-home"));
+    document.getElementById("nav-home").addEventListener("click", () => {
+        showActiveFrame("sec-home");
+        if (activeSessionUser) renderHomePage(activeSessionUser.role);
+    });
     document.getElementById("nav-login").addEventListener("click", () => showActiveFrame("sec-login"));
     document.getElementById("nav-dashboard").addEventListener("click", () => showActiveFrame("sec-dashboard"));
     document.getElementById("nav-adm-catalog").addEventListener("click", () => {
@@ -474,16 +531,15 @@ This cannot be undone.`
                 itemName: itemData.packName || selectedPackName,
                 targetDocRef: targetDoc.ref,
                 preDeleteConfirm: async () => {
-                    // (d) Block deletion if pack is allotted to any customer
-                    const allotQ = query(collection(db, "customerServicePacks"),
+                    const aQ = query(collection(db, "customerServicePacks"),
                         where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
                         where("packName",    "==", selectedPackName));
-                    const allotSnap = await getDocs(allotQ);
-                    if (!allotSnap.empty) {
-                        alert(`⚠️ Deletion Blocked: The package "${selectedPackName}" has been allotted to ${allotSnap.size} customer(s) and cannot be deleted.\n\nTo retire this package, create a new one with updated settings and stop selling this one.`);
+                    const aSnap = await getDocs(aQ);
+                    if (!aSnap.empty) {
+                        alert(`⚠️ Deletion Blocked: "${selectedPackName}" is allotted to ${aSnap.size} customer(s). Create a new package instead.`);
                         return false;
                     }
-                    return confirm(`Are you absolutely sure you want to permanently delete "${itemData.packName || selectedPackName}"? This action cannot be reversed.`);
+                    return confirm(`Permanently delete "${itemData.packName || selectedPackName}"? Cannot be undone.`);
                 },
                 onDeleted: () => {
                     document.getElementById("frm-adm-commonpack").reset();
@@ -700,6 +756,7 @@ function renderAuthorizedWorkspaceSession() {
 
     document.getElementById("lbl-active-context").innerText = `Branch ID Layer: ${activeSessionUser.userNo} | Logged In Role: ${activeSessionUser.role} | ${activeSessionUser.name}`;
     configureUserProfileFormForRole(activeSessionUser.role);
+    renderHomePage(activeSessionUser.role);
     startSessionWatchdog();
     showActiveFrame("sec-dashboard");
     
@@ -1003,20 +1060,18 @@ async function processCommonPackADMFormSubmission(e) {
     const totalAmt  = parseFloat(document.getElementById("pack-total-amt").value) || 0;
     const activeFlag = document.getElementById("pack-active").checked;
 
-    // (c) No subservices selected
     const selectedSubServices = [];
     document.querySelectorAll(".chk-pack-subservice:checked").forEach(input => selectedSubServices.push(input.value));
     if (selectedSubServices.length === 0)
         return alert("Validation: Please select at least one Individual Service Item for this package before saving.");
 
-    // (a) Price validation: must be between 15% and 100% of total
     if (totalAmt > 0) {
         const minAllowed = totalAmt * 0.15;
         if (price > totalAmt) {
-            const go = confirm(`⚠️ Price Alert: The Offered Price (₹${price.toLocaleString("en-IN")}) is above the Total Services Price (₹${totalAmt.toLocaleString("en-IN")}). This means you are charging more than list price.\n\nProceed anyway?`);
+            const go = confirm(`⚠️ Price Alert: Offered Price (₹${price.toLocaleString("en-IN")}) exceeds Total Services Price (₹${totalAmt.toLocaleString("en-IN")}). Proceed anyway?`);
             if (!go) return;
         } else if (price < minAllowed) {
-            const go = confirm(`⚠️ Price Alert: The Offered Price (₹${price.toLocaleString("en-IN")}) is below 15% of the Total Services Price (₹${totalAmt.toLocaleString("en-IN")}). Minimum suggested price is ₹${minAllowed.toLocaleString("en-IN", {maximumFractionDigits:0})}.\n\nProceed anyway?`);
+            const go = confirm(`⚠️ Price Alert: Offered Price (₹${price.toLocaleString("en-IN")}) is below 15% of Total (₹${minAllowed.toLocaleString("en-IN",{maximumFractionDigits:0})} min). Proceed anyway?`);
             if (!go) return;
         }
     }
@@ -1027,41 +1082,32 @@ async function processCommonPackADMFormSubmission(e) {
 
         if (existingPackName) {
             const targetDoc = await fetchOwnerRecordByCode("commonServicePacks", "packName", existingPackName);
-            if (!targetDoc)
-                return alert("Update blocked: Could not find the selected package in the catalog.");
-
-            // (d) Block modify if pack is already allotted to any customer
+            if (!targetDoc) return alert("Update blocked: Could not find the selected package in the catalog.");
             const allotQ = query(collection(db, "customerServicePacks"),
                 where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
                 where("packName",    "==", existingPackName));
             const allotSnap = await getDocs(allotQ);
-            if (!allotSnap.empty) {
-                return alert(`⚠️ Modification Blocked: The package "${existingPackName}" has already been allotted to ${allotSnap.size} customer(s) and cannot be modified.\n\nTo make changes, please create a new package with the updated settings instead.`);
-            }
-
+            if (!allotSnap.empty)
+                return alert(`⚠️ Modification Blocked: "${existingPackName}" is allotted to ${allotSnap.size} customer(s). Create a new package instead.`);
             packDocRef = targetDoc.ref;
         } else {
             isNewItem = true;
             packDocRef = doc(db, "commonServicePacks", `${activeSessionUser.ownerUserNo}_CPACK_${nameId.replace(/\s+/g, "_")}`);
         }
 
-        // (b) setDoc with no merge — fully replaces subServicesArray and all fields
         await setDoc(packDocRef, {
             ownerUserNo: activeSessionUser.ownerUserNo, packName: nameId, packType: "Type2",
             offerPrice: price, totalAmount: totalAmt,
-            subServicesArray: selectedSubServices,   // complete replacement
+            subServicesArray: selectedSubServices,
             active: activeFlag, createdAt: new Date().toISOString()
         });
 
-        alert(isNewItem
-            ? "Success: New pre-paid package added to available salon catalog."
-            : `✅ Success: Changes saved for "${nameId}".`);
-
+        alert(isNewItem ? "Success: New pre-paid package added." : `✅ Success: Changes saved for "${nameId}".`);
         document.getElementById("frm-adm-commonpack").reset();
         document.getElementById("pack-active").checked = true;
         document.getElementById("pack-type-select").value = "Type2";
-        const discountEl = document.getElementById("pack-discount-display");
-        if (discountEl) discountEl.textContent = "";
+        const discEl2 = document.getElementById("pack-discount-display");
+        if (discEl2) discEl2.textContent = "";
         removeCatalogDeleteButton("btn-dynamic-pack-delete");
         renderCatalogSubServicesCheckboxes();
         refreshAllAdministrativeTables();
@@ -1710,9 +1756,11 @@ async function loadWorkspaceDropdownMappings() {
                 allotPacksCache.set(data.packName, data);
                 allotSelectEl.innerHTML += `<option value="${data.packName}">${data.packName} (ID: ${data.packName})</option>`;
             });
+            allotSelectEl._allOptions = Array.from(allotSelectEl.options);
         }
     }
     await populateSelect("commonServicePacks", "pack-select-existing", "packName", "packName");
+    { const _pse = document.getElementById("pack-select-existing"); if (_pse) _pse._allOptions = Array.from(_pse.options); }
     await populateSelect("users", "allot-customer-select", "userNo", "name", "CUSTOMER");
     {
         const _acEl = document.getElementById("allot-customer-select");

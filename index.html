@@ -31,9 +31,16 @@
 
     <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
         
-        <section id="sec-home" class="view-section active text-center py-5">
+        <section id="sec-home" class="view-section active text-center py-5 position-relative">
             <h1 class="display-5 fw-bold text-dark">Welcome to GlamTrack</h1>
             <p class="lead text-muted">Manage your salon appointments, customer packages, and service balances easily.</p>
+            <div id="home-gallery" style="display:none;" class="mt-4 px-2">
+                <div class="row g-3" id="home-gallery-grid"></div>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    <span class="home-gallery-dot rounded-circle bg-dark" style="width:12px;height:12px;cursor:pointer;display:inline-block;transition:background .3s"></span>
+                    <span class="home-gallery-dot rounded-circle bg-secondary" style="width:12px;height:12px;cursor:pointer;display:inline-block;transition:background .3s"></span>
+                </div>
+            </div>
         </section>
 
         <section id="sec-login" class="view-section">
@@ -80,14 +87,15 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Customer</label>
-                                <input type="text" id="utilize-customer-search" class="form-control form-control-sm mb-1" placeholder="🔍 Search customer by name…" autocomplete="off">
                                 <select class="form-select" id="utilize-customer-select" required></select>
+                                <input type="text" id="utilize-customer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search customer by name…" autocomplete="off">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Active Package</label>
                                 <select class="form-select" id="utilize-pack-select" required>
                                     <option value="">-- Choose a Customer First --</option>
                                 </select>
+                                <input type="text" id="utilize-pack-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
                             </div>
                         </div>
                         <div id="utilize-pack-financial" class="mb-3 p-3 bg-warning-subtle border border-warning rounded small" style="display:none;">
@@ -145,12 +153,13 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Customer</label>
-                                <input type="text" id="allot-customer-search" class="form-control form-control-sm mb-1" placeholder="🔍 Search customer by name…" autocomplete="off">
                                 <select class="form-select" id="allot-customer-select" required></select>
+                                <input type="text" id="allot-customer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search customer by name…" autocomplete="off">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Package </label>
                                 <select class="form-select" id="allot-pack-select" required></select>
+                                <input type="text" id="allot-pack-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
                             </div>
                         </div>
                         <div id="allot-pack-preview" class="mb-3 p-3 bg-info-subtle border border-info rounded small" style="display:none;">
@@ -341,6 +350,7 @@
                             <select class="form-select border-warning" id="pack-select-existing">
                                 <option value="">-- Creating a Brand New Package --</option>
                             </select>
+                            <input type="text" id="pack-select-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
                             <div class="form-text text-muted small">Leave blank when defining a new package offer.</div>
                         </div>
                         <div class="row">
