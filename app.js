@@ -329,8 +329,38 @@ function initViewRouterLinks() {
     document.getElementById("frm-adm-service").addEventListener("submit", processServiceADMFormSubmission);
     document.getElementById("frm-adm-subservice").addEventListener("submit", processSubServiceFormSubmission);
     document.getElementById("frm-adm-commonpack").addEventListener("submit", processCommonPackADMFormSubmission);
+    document.getElementById("btn-reset-commonpack")?.addEventListener("click", () => {
+        document.getElementById("frm-adm-commonpack").reset();
+        document.getElementById("pack-active").checked = true;
+        document.getElementById("pack-type-select").value = "Type2";
+        const discEl = document.getElementById("pack-discount-display");
+        if (discEl) discEl.textContent = "";
+        removeCatalogDeleteButton("btn-dynamic-pack-delete");
+        renderCatalogSubServicesCheckboxes();
+    });
+
     document.getElementById("frm-adm-user-profile").addEventListener("submit", processUserADMFormSubmission);
+    document.getElementById("btn-reset-userprofile")?.addEventListener("click", () => {
+        document.getElementById("frm-adm-user-profile").reset();
+        document.getElementById("usr-active").checked = true;
+        removeCatalogDeleteButton("btn-dynamic-usr-delete");
+        if (activeSessionUser) configureUserProfileFormForRole(activeSessionUser.role);
+    });
     document.getElementById("frm-allot-membership").addEventListener("submit", processAllotmentFormSubmission);
+    document.getElementById("btn-reset-allot")?.addEventListener("click", () => {
+        document.getElementById("frm-allot-membership").reset();
+        allotCurrentPackTotalAmount = 0;
+        const previewEl = document.getElementById("allot-pack-preview");
+        if (previewEl) previewEl.style.display = "none";
+        const discEl = document.getElementById("allot-sold-discount");
+        if (discEl) discEl.textContent = "";
+        const unpaidEl = document.getElementById("allot-unpaid-display");
+        if (unpaidEl) unpaidEl.textContent = "";
+        const srch = document.getElementById("allot-customer-search");
+        if (srch) { srch.value = ""; srch.dispatchEvent(new Event("input")); }
+        const psrch = document.getElementById("allot-pack-search");
+        if (psrch) psrch.value = "";
+    });
 
     // Core Security Configuration Form Submit Pipelines
     document.getElementById("frm-access-control-matrix").addEventListener("submit", processAccessControlFormSubmission);
@@ -1089,10 +1119,24 @@ async function processCommonPackADMFormSubmission(e) {
             const allotSnap = await getDocs(allotQ);
             if (!allotSnap.empty)
                 return alert(`⚠️ Modification Blocked: "${existingPackName}" is allotted to ${allotSnap.size} customer(s). Create a new package instead.`);
+            // (c) Use the SAME document ref regardless of name change — no new doc created
             packDocRef = targetDoc.ref;
         } else {
             isNewItem = true;
-            packDocRef = doc(db, "commonServicePacks", `${activeSessionUser.ownerUserNo}_CPACK_${nameId.replace(/\s+/g, "_")}`);
+            // (b) ID format: <ownerUserNo>_PACK_<first3LettersOfName><serial>
+            const prefix = nameId.replace(/\s+/g, "").substring(0, 3).toUpperCase();
+            // Find next serial: query all packs for this owner whose packId starts with this prefix
+            const allPacksQ = query(collection(db, "commonServicePacks"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo));
+            const allPacksSnap = await getDocs(allPacksQ);
+            let maxSerial = 0;
+            const prefixPattern = new RegExp(`^${activeSessionUser.ownerUserNo}_PACK_${prefix}(\\d+)$`);
+            allPacksSnap.forEach(d => {
+                const m = d.id.match(prefixPattern);
+                if (m) { const n = parseInt(m[1], 10); if (n > maxSerial) maxSerial = n; }
+            });
+            const serial = maxSerial + 1;
+            packDocRef = doc(db, "commonServicePacks", `${activeSessionUser.ownerUserNo}_PACK_${prefix}${serial}`);
         }
 
         await setDoc(packDocRef, {
@@ -1157,12 +1201,54 @@ async function processUserADMFormSubmission(e) {
 
         if (!targetUserNo) {
             isNewItem = true;
-            targetUserNo = String(Math.floor(1000 + Math.random() * 9000));
+
+            if (role === "CUSTOMER") {
+                // 4-digit sequential, scoped to this owner
+                const q = query(collection(db, "users"),
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("role", "==", "CUSTOMER"));
+                const snap = await getDocs(q);
+                let maxNo = 0;
+                snap.forEach(d => { const n = parseInt(d.data().userNo, 10); if (!isNaN(n) && n > maxNo) maxNo = n; });
+                targetUserNo = String(maxNo + 1).padStart(4, "0");
+            } else if (role === "MANAGER") {
+                // 3-digit sequential, scoped to this owner
+                const q = query(collection(db, "users"),
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("role", "==", "MANAGER"));
+                const snap = await getDocs(q);
+                let maxNo = 0;
+                snap.forEach(d => { const n = parseInt(d.data().userNo, 10); if (!isNaN(n) && n > maxNo) maxNo = n; });
+                targetUserNo = String(maxNo + 1).padStart(3, "0");
+            } else if (role === "OWNER") {
+                // 3-digit sequential across ALL owners — query SUPER_USER scope (ownerUserNo='000')
+                const q = query(collection(db, "users"),
+                    where("ownerUserNo", "==", "000"),
+                    where("role", "==", "OWNER"));
+                const snap = await getDocs(q);
+                let maxNo = 0;
+                snap.forEach(d => { const n = parseInt(d.data().userNo, 10); if (!isNaN(n) && n > maxNo) maxNo = n; });
+                targetUserNo = String(maxNo + 1).padStart(3, "0");
+            }
         }
 
-        // OWNER accounts use their own userNo as their ownerUserNo (tenant key)
-        const recordOwnerUserNo = (role === "OWNER") ? targetUserNo : activeSessionUser.ownerUserNo;
-        await setDoc(doc(db, "users", `${recordOwnerUserNo}_USR_${targetUserNo}`), {
+        // Build document ID and ownerUserNo per role
+        let docId, recordOwnerUserNo;
+        if (role === "CUSTOMER") {
+            recordOwnerUserNo = activeSessionUser.ownerUserNo;
+            docId = `${recordOwnerUserNo}-CUST-${targetUserNo}`;
+        } else if (role === "MANAGER") {
+            recordOwnerUserNo = activeSessionUser.ownerUserNo;
+            docId = `${recordOwnerUserNo}-MGR-${targetUserNo}`;
+        } else if (role === "OWNER") {
+            recordOwnerUserNo = targetUserNo;   // owner's own userNo becomes their tenant key
+            docId = `${targetUserNo}-OWNER`;
+        } else {
+            // fallback for any other role
+            recordOwnerUserNo = activeSessionUser.ownerUserNo;
+            docId = `${recordOwnerUserNo}-${role}-${targetUserNo}`;
+        }
+        await setDoc(doc(db, "users", docId), {
             ownerUserNo: recordOwnerUserNo, userNo: targetUserNo, role: role, name: name, sex: sex,
             ageGroup: age, email: email, password: pass, phone: phone, distance: dist, address: addr,
             googleMapLink: maps, active: activeFlag, startDate: new Date().toISOString().split("T")[0], createdAt: new Date().toISOString()
@@ -1181,7 +1267,7 @@ async function processUserADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("User Identity Provisioning Endpoint", err); }
 }
 
-async function handleAllotPackSelectChange() {
+async async function handleAllotPackSelectChange() {
     const packName = document.getElementById("allot-pack-select").value;
     const previewEl = document.getElementById("allot-pack-preview");
     const detailsEl = document.getElementById("allot-pack-preview-details");
@@ -1215,12 +1301,41 @@ async function handleAllotPackSelectChange() {
             <div class="col-6"><span class="text-muted">Total Services Price (₹):</span> <strong>₹${allotCurrentPackTotalAmount.toLocaleString("en-IN")}</strong></div>
             <div class="col-6"><span class="text-muted">Pack Offered Price (₹):</span> <strong>${offerPrice !== null ? "₹" + offerPrice.toLocaleString("en-IN") : "N/A"}${discountBadge}</strong></div>
             <div class="col-12"><span class="text-muted">Service Items Allowed in this Pack:</span> <strong>${serviceCount} item${serviceCount === 1 ? "" : "s"}</strong></div>
+            <div class="col-12" id="allot-subservice-list"><span class="text-muted small">Loading items…</span></div>
         </div>`;
     previewEl.style.display = "block";
 
     if (soldPriceEl && offerPrice !== null) {
         soldPriceEl.value = offerPrice;
         updateAllotmentDiscountAndBalance();
+    }
+
+    // (a) Fetch and display individual service items with price
+    if (pack.subServicesArray && pack.subServicesArray.length > 0) {
+        try {
+            const ssResults = await Promise.all(pack.subServicesArray.map(code => {
+                const q = query(collection(db, "subServices"),
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("subServiceCode", "==", code));
+                return getDocs(q);
+            }));
+            let listHtml = `<div class="mt-1"><span class="text-muted fw-bold small">Included Services:</span><ul class="mb-0 mt-1 ps-3">`;
+            ssResults.forEach(snap => {
+                if (!snap.empty) {
+                    const ss = snap.docs[0].data();
+                    listHtml += `<li class="small">${ss.subServiceName} <span class="text-success fw-bold">₹${Number(ss.rate).toLocaleString("en-IN")}</span></li>`;
+                }
+            });
+            listHtml += `</ul></div>`;
+            const listEl = document.getElementById("allot-subservice-list");
+            if (listEl) listEl.innerHTML = listHtml;
+        } catch (e) {
+            const listEl = document.getElementById("allot-subservice-list");
+            if (listEl) listEl.innerHTML = `<span class="text-muted small">Could not load service items.</span>`;
+        }
+    } else {
+        const listEl = document.getElementById("allot-subservice-list");
+        if (listEl) listEl.innerHTML = "";
     }
 }
 
@@ -1279,22 +1394,51 @@ async function processAllotmentFormSubmission(e) {
 
     if (!cust || !templatePackName) return alert("System Configuration Error: Please ensure you select both a valid client and an active package setup template.");
 
+    if (expiry && start && expiry < start)
+        return alert("Validation Error: Expiration Date cannot be before the Activation Date.");
+
     try {
         const q = query(collection(db, "commonServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("packName", "==", templatePackName));
         const res = await getDocs(q);
         if (res.empty) return alert("Activation Blocked: Could not find the selected core packaging model blueprint rules.");
         const templateData = res.docs[0].data();
 
-        const uniqueAllotId = "APACK-" + Math.floor(10000 + Math.random() * 90000);
-        await setDoc(doc(db, "customerServicePacks", `${activeSessionUser.ownerUserNo}_ALLOT_${uniqueAllotId}`), {
-            ownerUserNo: activeSessionUser.ownerUserNo, allotId: uniqueAllotId, customerNo: cust, packName: templatePackName,
-            packType: templateData.packType,
-            remainingBalance: soldPrice,
-            totalAmount: Number(templateData.totalAmount),
-            soldPrice: soldPrice,
-            amountReceived: amountReceived,
-            unpaidBalance: unpaidBalance,
-            subServicesArray: templateData.subServicesArray || [], startDate: start, expiryDate: expiry || null, active: true, createdAt: new Date().toISOString()
+        // (c) allotId: <ownerUserNo>_APCK_<first3LettersOfPackName><serial>
+        //     serial = max serial already used for THIS packName by THIS owner + 1
+        const packPrefix = templatePackName.replace(/\s+/g, "").substring(0, 3).toUpperCase();
+        const existingAllotsQ = query(collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("packName",    "==", templatePackName));
+        const existingAllotsSnap = await getDocs(existingAllotsQ);
+        let maxPackSerial = 0;
+        const packSerialPattern = new RegExp(`^${activeSessionUser.ownerUserNo}_APCK_${packPrefix}(\\d+)$`);
+        existingAllotsSnap.forEach(d => {
+            const m = (d.data().allotId || "").match(packSerialPattern);
+            if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > maxPackSerial) maxPackSerial = n; }
+        });
+        const allotId = `${activeSessionUser.ownerUserNo}_APCK_${packPrefix}${maxPackSerial + 1}`;
+
+        // (d) doc id: <ownerUserNo>_ALLOT_<num>
+        //     num = max existing serial across ALL allotments for this owner + 1
+        const allOwnerAllotsQ = query(collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo));
+        const allOwnerAllotsSnap = await getDocs(allOwnerAllotsQ);
+        let maxAllotSerial = 0;
+        const allotDocPattern = new RegExp(`^${activeSessionUser.ownerUserNo}_ALLOT_(\\d+)$`);
+        allOwnerAllotsSnap.forEach(d => {
+            const m = d.id.match(allotDocPattern);
+            if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > maxAllotSerial) maxAllotSerial = n; }
+        });
+        const docNum = maxAllotSerial + 1;
+        const docId  = `${activeSessionUser.ownerUserNo}_ALLOT_${docNum}`;
+
+        await setDoc(doc(db, "customerServicePacks", docId), {
+            ownerUserNo: activeSessionUser.ownerUserNo, allotId: allotId, customerNo: cust,
+            packName: templatePackName, packType: templateData.packType,
+            remainingBalance: soldPrice, totalAmount: Number(templateData.totalAmount),
+            soldPrice: soldPrice, amountReceived: amountReceived, unpaidBalance: unpaidBalance,
+            subServicesArray: templateData.subServicesArray || [],
+            startDate: start, expiryDate: expiry || null, active: true, createdAt: new Date().toISOString()
         });
 
         alert("Success: Package has been successfully assigned and logged to this client profile account card.");
