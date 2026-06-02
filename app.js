@@ -264,7 +264,7 @@ function renderHomePage(role) {
     const images = Array.from({length: 8}, (_, i) => `sample_package_${i + 1}.png`);
     const pages  = [images.slice(0, 4), images.slice(4, 8)];
     let pageIdx  = 0;
-    function showPage(idx) {
+    const showPage = (idx) => {
         const grid = document.getElementById("home-gallery-grid");
         if (!grid) return;
         grid.innerHTML = "";
@@ -363,15 +363,30 @@ function initViewRouterLinks() {
     });
 
     // Core Security Configuration Form Submit Pipelines
-    document.getElementById("frm-access-control-matrix").addEventListener("submit", processAccessControlFormSubmission);
-    document.getElementById("frm-utilize-service-visit").addEventListener("submit", processVisitDeductionFormSubmission);
+    document.getElementById("frm-access-control-matrix")?.addEventListener("submit", processAccessControlFormSubmission);
+    document.getElementById("frm-utilize-service-visit")?.addEventListener("submit", processVisitDeductionFormSubmission);
+    document.getElementById("btn-reset-utilize")?.addEventListener("click", () => {
+        document.getElementById("frm-utilize-service-visit").reset();
+        document.getElementById("container-utilize-subservices").innerHTML = "";
+        utilizePrevUnpaidBalance = 0;
+        const financialEl = document.getElementById("utilize-pack-financial");
+        if (financialEl) financialEl.style.display = "none";
+        const totalEl = document.getElementById("utilize-services-total");
+        if (totalEl) { totalEl.style.display = "none"; totalEl.textContent = ""; }
+        const newUnpaidEl = document.getElementById("utilize-new-unpaid-display");
+        if (newUnpaidEl) newUnpaidEl.textContent = "";
+        const srch = document.getElementById("utilize-customer-search");
+        if (srch) { srch.value = ""; srch.dispatchEvent(new Event("input")); }
+        const psrch = document.getElementById("utilize-pack-search");
+        if (psrch) psrch.value = "";
+    });
     
     // Automated reactive lookups processing links
-    document.getElementById("utilize-customer-select").addEventListener("change", updateCustomerAllottedPacksDropdown);
-    document.getElementById("utilize-pack-select").addEventListener("change", renderUtilizeSubServicesCheckboxes);
-    document.getElementById("allot-pack-select").addEventListener("change", handleAllotPackSelectChange);
+    document.getElementById("utilize-customer-select")?.addEventListener("change", updateCustomerAllottedPacksDropdown);
+    document.getElementById("utilize-pack-select")?.addEventListener("change", renderUtilizeSubServicesCheckboxes);
+    document.getElementById("allot-pack-select")?.addEventListener("change", handleAllotPackSelectChange);
 
-    document.getElementById("cat-select-existing").addEventListener("change", async (e) => {
+    document.getElementById("cat-select-existing")?.addEventListener("change", async (e) => {
         const selectedCode = e.target.value ? e.target.value.trim() : "";
         removeCatalogDeleteButton("btn-dynamic-cat-delete");
 
@@ -411,7 +426,7 @@ function initViewRouterLinks() {
         }
     });
 
-    document.getElementById("srv-select-existing").addEventListener("change", async (e) => {
+    document.getElementById("srv-select-existing")?.addEventListener("change", async (e) => {
         const selectedCode = e.target.value ? e.target.value.trim() : "";
         removeCatalogDeleteButton("btn-dynamic-srv-delete");
 
@@ -452,7 +467,7 @@ function initViewRouterLinks() {
         }
     });
 
-    document.getElementById("usr-select-existing").addEventListener("change", async (e) => {
+    document.getElementById("usr-select-existing")?.addEventListener("change", async (e) => {
         const selectedUserNo = e.target.value ? e.target.value.trim() : "";
         removeCatalogDeleteButton("btn-dynamic-usr-delete");
 
@@ -519,7 +534,7 @@ This cannot be undone.`
         }
     });
 
-    document.getElementById("pack-select-existing").addEventListener("change", async (e) => {
+    document.getElementById("pack-select-existing")?.addEventListener("change", async (e) => {
         const selectedPackName = e.target.value ? e.target.value.trim() : "";
         removeCatalogDeleteButton("btn-dynamic-pack-delete");
 
@@ -588,7 +603,7 @@ This cannot be undone.`
         }
     });
 
-    document.getElementById("sub-select-existing").addEventListener("change", async (e) => {
+    document.getElementById("sub-select-existing")?.addEventListener("change", async (e) => {
         const selectedCode = e.target.value ? e.target.value.trim() : "";
         removeCatalogDeleteButton("btn-dynamic-sub-delete");
 
@@ -1267,7 +1282,7 @@ async function processUserADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("User Identity Provisioning Endpoint", err); }
 }
 
-async async function handleAllotPackSelectChange() {
+async function handleAllotPackSelectChange() {
     const packName = document.getElementById("allot-pack-select").value;
     const previewEl = document.getElementById("allot-pack-preview");
     const detailsEl = document.getElementById("allot-pack-preview-details");
@@ -1529,35 +1544,51 @@ async function renderUtilizeSubServicesCheckboxes() {
     if (!allotId) return;
 
     try {
-        const q = query(collection(db, "customerServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("allotId", "==", allotId)); 
+        const q = query(collection(db, "customerServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("allotId", "==", allotId));
         const res = await getDocs(q);
         if (res.empty) return;
         const pData = res.docs[0].data();
 
-        const soldPrice = pData.soldPrice !== undefined ? Number(pData.soldPrice) : null;
+        const soldPrice   = pData.soldPrice   !== undefined ? Number(pData.soldPrice)   : null;
+        const totalAmount = pData.totalAmount  !== undefined ? Number(pData.totalAmount) : null;
         const amtReceived = pData.amountReceived !== undefined ? Number(pData.amountReceived) : null;
+        const remainingBalance = Number(pData.remainingBalance);
         const unpaidBalance = pData.unpaidBalance !== undefined
             ? Number(pData.unpaidBalance)
             : (soldPrice !== null && amtReceived !== null ? soldPrice - amtReceived : 0);
         utilizePrevUnpaidBalance = unpaidBalance;
 
-        const isExhausted = Number(pData.remainingBalance) <= 0;
+        // (c) Discount % from (totalAmount - soldPrice)*100/totalAmount
+        let discountPct = 0;
+        if (totalAmount && totalAmount > 0 && soldPrice !== null) {
+            discountPct = ((totalAmount - soldPrice) * 100) / totalAmount;
+            if (discountPct < 0) discountPct = 0; // no negative discount shown
+        }
+
+        const isExhausted = remainingBalance <= 0;
         const isExpired   = pData.expiryDate && pData.expiryDate !== null;
         if (isExhausted || isExpired) {
             let reason = [];
-            if (isExhausted) reason.push(`remaining balance is ${pData.remainingBalance} (exhausted)`);
+            if (isExhausted) reason.push(`remaining balance is ${remainingBalance} (exhausted)`);
             if (isExpired)   reason.push(`package expired on ${pData.expiryDate}`);
             alert(`⚠️ Package Exhausted/Expired: ${reason.join(" and ")}.`);
         }
+
+        // (b) Financial summary — totalAmount + renamed remainingBalance caption + (c) discount %
         if (financialEl) {
             const detailsEl = document.getElementById("utilize-pack-financial-details");
             if (detailsEl) {
                 const unpaidClass = unpaidBalance > 0 ? "text-danger" : "text-success";
+                const discBadge = discountPct > 0
+                    ? `<span class="badge bg-success ms-1">${discountPct.toFixed(1)}% discount</span>`
+                    : `<span class="badge bg-secondary ms-1">No discount</span>`;
                 detailsEl.innerHTML = `
                     <div class="row g-2">
-                        <div class="col-6"><span class="text-muted">Sold at Price (₹):</span> <strong>${soldPrice !== null ? "₹" + soldPrice.toLocaleString("en-IN") : "N/A"}</strong></div>
+                        <div class="col-6"><span class="text-muted">Total Services Amount (₹):</span> <strong>${totalAmount !== null ? "₹" + totalAmount.toLocaleString("en-IN") : "N/A"}</strong></div>
+                        <div class="col-6"><span class="text-muted">Selling Price (₹):</span> <strong>${soldPrice !== null ? "₹" + soldPrice.toLocaleString("en-IN") : "N/A"} ${discBadge}</strong></div>
                         <div class="col-6"><span class="text-muted">Amount Received Before This Visit (₹):</span> <strong>${amtReceived !== null ? "₹" + amtReceived.toLocaleString("en-IN") : "N/A"}</strong></div>
-                        <div class="col-12"><span class="text-muted">Unpaid Balance Before This Visit (₹):</span> <strong class="${unpaidClass}">₹${unpaidBalance.toLocaleString("en-IN")}</strong></div>
+                        <div class="col-6"><span class="text-muted">Unpaid Balance Before This Visit (₹):</span> <strong class="${unpaidClass}">₹${unpaidBalance.toLocaleString("en-IN")}</strong></div>
+                        <div class="col-12"><span class="text-muted">Services of Amount yet to be availed (₹):</span> <strong class="text-primary">₹${remainingBalance.toLocaleString("en-IN")}</strong></div>
                     </div>`;
             }
             financialEl.style.display = "block";
@@ -1570,16 +1601,28 @@ async function renderUtilizeSubServicesCheckboxes() {
             return;
         }
 
+        // (c) Helper: round discounted price — nearest 10 if < 1000, nearest 100 otherwise
+        function applyDiscount(rate) {
+            const discounted = rate * (1 - discountPct / 100);
+            if (discounted < 1000) return Math.round(discounted / 10) * 10;
+            return Math.round(discounted / 100) * 100;
+        }
+
         for (const code of pData.subServicesArray) {
-            const ssQ = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("subServiceCode", "==", code)); 
+            const ssQ = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("subServiceCode", "==", code));
             const ssSnap = await getDocs(ssQ);
             if (!ssSnap.empty) {
                 const ss = ssSnap.docs[0].data();
+                const origRate      = Number(ss.rate);
+                const discountedRate = applyDiscount(origRate);
+                const priceLabel = discountPct > 0
+                    ? `<span class="text-decoration-line-through text-muted me-1">₹${origRate.toLocaleString("en-IN")}</span><span class="text-success fw-bold">₹${discountedRate.toLocaleString("en-IN")}</span>`
+                    : `<span class="fw-bold">₹${origRate.toLocaleString("en-IN")}</span>`;
                 container.innerHTML += `
                     <div class="form-check">
-                        <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${ss.rate}" id="chk-ut-${ss.subServiceCode}">
+                        <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${discountedRate}" id="chk-ut-${ss.subServiceCode}">
                         <label class="form-check-label small" for="chk-ut-${ss.subServiceCode}">
-                            ${ss.subServiceName} (Cost Capacity Charge: ${ss.rate})
+                            ${ss.subServiceName} — ${priceLabel}
                         </label>
                     </div>`;
             }
@@ -1636,7 +1679,11 @@ async function processVisitDeductionFormSubmission(e) {
     const addlAmtReceived = parseFloat(document.getElementById("utilize-addl-amt-received") ? document.getElementById("utilize-addl-amt-received").value : "") || 0;
 
     const checkedInputs = document.querySelectorAll(".chk-utilize-subservice:checked");
-    if (checkedInputs.length === 0) return alert("Action Required: Please check at least one box to select a service item rendered during today's customer appointment.");
+    // (d) Either addl amount received > 0 OR at least one service selected (or both)
+    const addlPositive = addlAmtReceived > 0;
+    const anyChecked   = checkedInputs.length > 0;
+    if (!addlPositive && !anyChecked)
+        return alert("Validation: Please either enter an additional amount received, or select at least one service item availed during this visit (or both).");
 
     try {
         const q = query(collection(db, "customerServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("allotId", "==", allotId)); 
