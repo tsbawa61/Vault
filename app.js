@@ -108,6 +108,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Apply Type3 UI on initial load (Type3 is default)
+    applyPackTypeUI(document.getElementById("pack-type-select")?.value || "Type3");
+
+    const packTypeSelect = document.getElementById("pack-type-select");
+    if (packTypeSelect) {
+        packTypeSelect.addEventListener("change", () => {
+            applyPackTypeUI(packTypeSelect.value);
+            // Re-run sum to sync pack-total-amt when switching back to Type1/Type2
+            updatePackSubServicesRunningSum();
+        });
+    }
+
     const packSubSearch = document.getElementById("pack-subservices-search");
     if (packSubSearch) {
         packSubSearch.addEventListener("input", () => {
@@ -235,10 +247,41 @@ function updatePackSubServicesRunningSum() {
         ? "Selected items total: ₹0"
         : `Selected items total: ₹${total.toLocaleString("en-IN")} (${count} item${count === 1 ? "" : "s"} selected)`;
 
-    const totalAmtEl = document.getElementById("pack-total-amt");
-    if (totalAmtEl) {
-        totalAmtEl.value = count === 0 ? "" : total;
-        updatePackDiscountDisplay();
+    // Only auto-update pack-total-amt for Type1/Type2 — Type3 has manual entry
+    const packType = document.getElementById("pack-type-select")?.value;
+    if (packType !== "Type3") {
+        const totalAmtEl = document.getElementById("pack-total-amt");
+        if (totalAmtEl) {
+            totalAmtEl.value = count === 0 ? "" : total;
+            updatePackDiscountDisplay();
+        }
+    }
+}
+
+// ── Dynamic UI for pack type ────────────────────────────────────────────────
+function applyPackTypeUI(packType) {
+    const totalAmtEl   = document.getElementById("pack-total-amt");
+    const totalAmtLbl  = document.getElementById("lbl-pack-total-amt");
+    const subLbl       = document.getElementById("lbl-pack-subservices");
+
+    if (packType === "Type3") {
+        // Editable total, mandatory, different placeholder
+        if (totalAmtEl) {
+            totalAmtEl.readOnly = false;
+            totalAmtEl.required = true;
+            totalAmtEl.placeholder = "Enter Total Price of Services";
+        }
+        if (totalAmtLbl) totalAmtLbl.textContent = "Total Price of Services (₹)";
+        if (subLbl) subLbl.textContent = "Choose Individual Service Items NOT allowed in this Pack";
+    } else {
+        // Type1 / Type2 — original behaviour
+        if (totalAmtEl) {
+            totalAmtEl.readOnly = true;
+            totalAmtEl.required = false;
+            totalAmtEl.placeholder = "Sum of all included individual services";
+        }
+        if (totalAmtLbl) totalAmtLbl.textContent = "Total Price of Individual Services (₹)";
+        if (subLbl) subLbl.textContent = "Choose Individual Service Items Allowed in this Pack";
     }
 }
 
@@ -332,7 +375,7 @@ function initViewRouterLinks() {
     document.getElementById("btn-reset-commonpack")?.addEventListener("click", () => {
         document.getElementById("frm-adm-commonpack").reset();
         document.getElementById("pack-active").checked = true;
-        document.getElementById("pack-type-select").value = "Type2";
+        document.getElementById("pack-type-select").value = "Type3"; applyPackTypeUI("Type3");
         const discEl = document.getElementById("pack-discount-display");
         if (discEl) discEl.textContent = "";
         removeCatalogDeleteButton("btn-dynamic-pack-delete");
@@ -541,7 +584,7 @@ This cannot be undone.`
         if (!selectedPackName) {
             document.getElementById("frm-adm-commonpack").reset();
             document.getElementById("pack-active").checked = true;
-            document.getElementById("pack-type-select").value = "Type2";
+            document.getElementById("pack-type-select").value = "Type3"; applyPackTypeUI("Type3");
             const discEl = document.getElementById("pack-discount-display");
             if (discEl) discEl.textContent = "";
             renderCatalogSubServicesCheckboxes();
@@ -557,7 +600,8 @@ This cannot be undone.`
 
             const itemData = targetDoc.data();
             document.getElementById("pack-name-id").value = itemData.packName || "";
-            document.getElementById("pack-type-select").value = "Type2";
+            const loadedType = itemData.packType || "Type3";
+            document.getElementById("pack-type-select").value = loadedType; applyPackTypeUI(loadedType);
             document.getElementById("pack-total-amt").value = itemData.totalAmount !== undefined ? itemData.totalAmount : "";
             document.getElementById("pack-price").value = itemData.offerPrice !== undefined ? itemData.offerPrice : "";
             document.getElementById("pack-active").checked = itemData.active === true;
@@ -589,7 +633,7 @@ This cannot be undone.`
                 onDeleted: () => {
                     document.getElementById("frm-adm-commonpack").reset();
                     document.getElementById("pack-active").checked = true;
-                    document.getElementById("pack-type-select").value = "Type2";
+                    document.getElementById("pack-type-select").value = "Type3"; applyPackTypeUI("Type3");
                     const discEl = document.getElementById("pack-discount-display");
                     if (discEl) discEl.textContent = "";
                     removeCatalogDeleteButton("btn-dynamic-pack-delete");
@@ -1107,7 +1151,8 @@ async function processCommonPackADMFormSubmission(e) {
 
     const selectedSubServices = [];
     document.querySelectorAll(".chk-pack-subservice:checked").forEach(input => selectedSubServices.push(input.value));
-    if (selectedSubServices.length === 0)
+    // Type2: at least one subservice required. Type3: zero is allowed (excluded items list can be empty).
+    if (type === "Type2" && selectedSubServices.length === 0)
         return alert("Validation: Please select at least one Individual Service Item for this package before saving.");
 
     if (totalAmt > 0) {
@@ -1157,7 +1202,7 @@ async function processCommonPackADMFormSubmission(e) {
         await setDoc(packDocRef, {
             ownerUserNo: activeSessionUser.ownerUserNo,
             id: packDocRef.id,
-            packName: nameId, packType: "Type2",
+            packName: nameId, packType: type,
             offerPrice: price, totalAmount: totalAmt,
             subServicesArray: selectedSubServices,
             active: activeFlag, createdAt: new Date().toISOString()
@@ -1166,7 +1211,7 @@ async function processCommonPackADMFormSubmission(e) {
         alert(isNewItem ? "Success: New pre-paid package added." : `✅ Success: Changes saved for "${nameId}".`);
         document.getElementById("frm-adm-commonpack").reset();
         document.getElementById("pack-active").checked = true;
-        document.getElementById("pack-type-select").value = "Type2";
+        document.getElementById("pack-type-select").value = "Type3"; applyPackTypeUI("Type3");
         const discEl2 = document.getElementById("pack-discount-display");
         if (discEl2) discEl2.textContent = "";
         removeCatalogDeleteButton("btn-dynamic-pack-delete");
@@ -1317,7 +1362,7 @@ async function handleAllotPackSelectChange() {
         <div class="row g-2">
             <div class="col-6"><span class="text-muted">Total Services Price (₹):</span> <strong>₹${allotCurrentPackTotalAmount.toLocaleString("en-IN")}</strong></div>
             <div class="col-6"><span class="text-muted">Pack Offered Price (₹):</span> <strong>${offerPrice !== null ? "₹" + offerPrice.toLocaleString("en-IN") : "N/A"}${discountBadge}</strong></div>
-            <div class="col-12"><span class="text-muted">Service Items Allowed in this Pack:</span> <strong>${serviceCount} item${serviceCount === 1 ? "" : "s"}</strong></div>
+            <div class="col-12"><span class="text-muted">Service Items ${pack.packType === "Type3" ? "NOT " : ""}Allowed in this Pack:</span> <strong>${serviceCount} item${serviceCount === 1 ? "" : "s"}</strong></div>
             <div class="col-12" id="allot-subservice-list"><span class="text-muted small">Loading items…</span></div>
         </div>`;
     previewEl.style.display = "block";
@@ -1336,7 +1381,7 @@ async function handleAllotPackSelectChange() {
                     where("subServiceCode", "==", code));
                 return getDocs(q);
             }));
-            let listHtml = `<div class="mt-1"><span class="text-muted fw-bold small">Included Services:</span><ul class="mb-0 mt-1 ps-3">`;
+            let listHtml = `<div class="mt-1"><span class="text-muted fw-bold small">${pack.packType === "Type3" ? "Excluded" : "Included"} Services:</span><ul class="mb-0 mt-1 ps-3">`;
             ssResults.forEach(snap => {
                 if (!snap.empty) {
                     const ss = snap.docs[0].data();
@@ -1608,37 +1653,73 @@ async function renderUtilizeSubServicesCheckboxes() {
             financialEl.style.display = "block";
         }
 
+        // (c) Show/hide addl-amt field based on unpaid balance
+        const addlAmtWrapper = document.getElementById("utilize-addl-amt-wrapper");
+        if (addlAmtWrapper) addlAmtWrapper.style.display = unpaidBalance > 0 ? "" : "none";
+
         updateUtilizeNewUnpaidDisplay();
 
-        if (!pData.subServicesArray || pData.subServicesArray.length === 0) {
-            container.innerHTML = `<span class="text-muted small">This package tier allows choice across all salon items without any explicit service restrictions rules.</span>`;
-            return;
-        }
+        const isType3 = pData.packType === "Type3";
 
-        // (c) Helper: round discounted price — nearest 10 if < 1000, nearest 100 otherwise
-        function applyDiscount(rate) {
-            const discounted = rate * (1 - discountPct / 100);
-            if (discounted < 1000) return Math.round(discounted / 10) * 10;
-            return Math.round(discounted / 100) * 100;
-        }
-
-        for (const code of pData.subServicesArray) {
-            const ssQ = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("subServiceCode", "==", code));
-            const ssSnap = await getDocs(ssQ);
-            if (!ssSnap.empty) {
-                const ss = ssSnap.docs[0].data();
-                const origRate      = Number(ss.rate);
-                const discountedRate = applyDiscount(origRate);
-                const priceLabel = discountPct > 0
-                    ? `<span class="text-decoration-line-through text-muted me-1">₹${origRate.toLocaleString("en-IN")}</span><span class="text-success fw-bold">₹${discountedRate.toLocaleString("en-IN")}</span>`
-                    : `<span class="fw-bold">₹${origRate.toLocaleString("en-IN")}</span>`;
+        if (isType3) {
+            // (a) Type3: fetch ALL subservices for this owner, exclude those in subServicesArray
+            const excludedCodes = new Set(pData.subServicesArray || []);
+            const allSsQ = query(collection(db, "subServices"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                where("active", "==", true));
+            const allSsSnap = await getDocs(allSsQ);
+            let anyRendered = false;
+            allSsSnap.forEach(doc => {
+                const ss = doc.data();
+                if (excludedCodes.has(ss.subServiceCode)) return; // skip excluded
+                const origRate = Number(ss.rate);
+                // (b) Type3: only original price, green bold, no strikethrough, data-rate = origRate
                 container.innerHTML += `
                     <div class="form-check">
-                        <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${discountedRate}" id="chk-ut-${ss.subServiceCode}">
+                        <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${origRate}" id="chk-ut-${ss.subServiceCode}">
                         <label class="form-check-label small" for="chk-ut-${ss.subServiceCode}">
-                            ${ss.subServiceName} — ${priceLabel}
+                            ${ss.subServiceName} — <span class="text-success fw-bold">₹${origRate.toLocaleString("en-IN")}</span>
                         </label>
                     </div>`;
+                anyRendered = true;
+            });
+            if (!anyRendered) {
+                container.innerHTML = `<span class="text-muted small">All service items are available for this package.</span>`;
+            }
+        } else {
+            // Type1 / Type2: original behaviour — show only items in subServicesArray
+            if (!pData.subServicesArray || pData.subServicesArray.length === 0) {
+                container.innerHTML = `<span class="text-muted small">This package tier allows choice across all salon items without any explicit service restrictions rules.</span>`;
+                container.querySelectorAll(".chk-utilize-subservice").forEach(chk => chk.addEventListener("change", updateUtilizeServicesTotal));
+                if (totalEl) totalEl.style.display = "block";
+                return;
+            }
+
+            // (c) Helper: round discounted price — nearest 10 if < 1000, nearest 100 otherwise
+            const applyDiscount = (rate) => {
+                const discounted = rate * (1 - discountPct / 100);
+                if (discounted < 1000) return Math.round(discounted / 10) * 10;
+                return Math.round(discounted / 100) * 100;
+            };
+
+            for (const code of pData.subServicesArray) {
+                const ssQ = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("subServiceCode", "==", code));
+                const ssSnap = await getDocs(ssQ);
+                if (!ssSnap.empty) {
+                    const ss = ssSnap.docs[0].data();
+                    const origRate       = Number(ss.rate);
+                    const discountedRate = applyDiscount(origRate);
+                    const priceLabel = discountPct > 0
+                        ? `<span class="text-decoration-line-through text-muted me-1">₹${origRate.toLocaleString("en-IN")}</span><span class="text-success fw-bold">₹${discountedRate.toLocaleString("en-IN")}</span>`
+                        : `<span class="fw-bold">₹${origRate.toLocaleString("en-IN")}</span>`;
+                    container.innerHTML += `
+                        <div class="form-check">
+                            <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${discountedRate}" id="chk-ut-${ss.subServiceCode}">
+                            <label class="form-check-label small" for="chk-ut-${ss.subServiceCode}">
+                                ${ss.subServiceName} — ${priceLabel}
+                            </label>
+                        </div>`;
+                }
             }
         }
 

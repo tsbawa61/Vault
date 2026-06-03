@@ -103,7 +103,7 @@
                             <div id="utilize-pack-financial-details"></div>
                         </div>
                         <div class="row align-items-end mb-3">
-                            <div class="col-md-6">
+                            <div class="col-md-6" id="utilize-addl-amt-wrapper">
                                 <label class="form-label small fw-bold">Additional Amt Received (₹)[Optional]</label>
                                 <div class="d-flex align-items-center gap-2">
                                     <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0">
@@ -365,16 +365,17 @@
                                 <input type="text" class="form-control" id="pack-name-id" placeholder="e.g., Bridal Glow Premium Pack" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label hidden class="form-label small fw-bold">Package Type</label>
-                                <select class="form-select" id="pack-type-select" required disabled hidden>
+                                <label class="form-label small fw-bold">Package Type</label>
+                                <select class="form-select" id="pack-type-select" required>
                                     <option value="Type1">By Service Count (Deducts 1 unit per visit item checked)</option>
-                                    <option value="Type2" selected>By Cash Value Balance (Deducts actual service price per item availed)</option>
+                                    <option value="Type2">By Cash Value Balance (Deducts actual service price per item availed)</option>
+                                    <option value="Type3" selected>Prime Discount Package</option>
                                 </select>
                             </div>
                         </div>
                         <div class="row align-items-end">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Total Price of Individual Services  (₹)</label>
+                                <label class="form-label small fw-bold" id="lbl-pack-total-amt">Total Price of Individual Services  (₹)</label>
                                 <input type="number" class="form-control" id="pack-total-amt" placeholder="Sum of all included individual services" readonly>
                             </div>
                             <div class="col-md-6 mb-3">
@@ -386,7 +387,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Choose Individual Service Items Allowed in this Pack</label>
+                            <label class="form-label small fw-bold" id="lbl-pack-subservices">Choose Individual Service Items Allowed in this Pack</label>
                             <input type="text" id="pack-subservices-search" class="form-control form-control-sm mb-2" placeholder="🔍 Search service items…" autocomplete="off">
                             <div id="container-pack-subservices" class="p-3 border rounded bg-light" style="max-height: 200px; overflow-y: auto;"></div>
                             <div id="pack-subservices-sum" class="form-text fw-bold text-success mt-2">Selected items total: ₹0</div>
