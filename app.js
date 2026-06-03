@@ -422,6 +422,8 @@ function initViewRouterLinks() {
         if (srch) { srch.value = ""; srch.dispatchEvent(new Event("input")); }
         const psrch = document.getElementById("utilize-pack-search");
         if (psrch) psrch.value = "";
+        const histPanel = document.getElementById("utilize-visit-history");
+        if (histPanel) histPanel.style.display = "none";
     });
     
     // Automated reactive lookups processing links
@@ -1497,7 +1499,10 @@ async function processAllotmentFormSubmission(e) {
         await setDoc(doc(db, "customerServicePacks", docId), {
             ownerUserNo: activeSessionUser.ownerUserNo, allotId: allotId, customerNo: cust,
             packName: templatePackName, packType: templateData.packType,
-            remainingBalance: soldPrice, totalAmount: Number(templateData.totalAmount),
+            // Type3: remainingBalance = totalAmount (customer avails services up to full value, discount is in price paid)
+            // Type1/Type2: remainingBalance = soldPrice
+            remainingBalance: templateData.packType === "Type3" ? Number(templateData.totalAmount) : soldPrice,
+            totalAmount: Number(templateData.totalAmount),
             soldPrice: soldPrice, amountReceived: amountReceived, unpaidBalance: unpaidBalance,
             subServicesArray: templateData.subServicesArray || [],
             startDate: start, expiryDate: expiry || null, active: true, createdAt: new Date().toISOString()
@@ -1728,7 +1733,61 @@ async function renderUtilizeSubServicesCheckboxes() {
         });
         if (totalEl) totalEl.style.display = "block";
 
+        // Load visit history for this package + customer
+        await renderVisitHistory(allotId, customerNo);
+
     } catch (err) { await handleTelemetryAlert("Dynamic Subservice Checker Interface", err); }
+}
+
+async function renderVisitHistory(allotId, customerNo) {
+    const panel  = document.getElementById("utilize-visit-history");
+    const tbody  = document.getElementById("tbl-utilize-visit-history");
+    if (!panel || !tbody) return;
+
+    panel.style.display = "none";
+    tbody.innerHTML = "";
+    if (!allotId || !customerNo) return;
+
+    try {
+        const logsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId",     "==", allotId),
+            where("customerNo",  "==", customerNo));
+        const logsSnap = await getDocs(logsQ);
+        if (logsSnap.empty) return;
+
+        // Collect all unique subServiceCodes across all logs for a single batch name lookup
+        const allCodes = new Set();
+        logsSnap.forEach(d => (d.data().itemsRendered || []).forEach(c => allCodes.add(c)));
+
+        // Fetch subservice names in parallel
+        const nameMap = {};
+        await Promise.all([...allCodes].map(async code => {
+            const q = query(collection(db, "subServices"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                where("subServiceCode", "==", code));
+            const snap = await getDocs(q);
+            nameMap[code] = snap.empty ? code : snap.docs[0].data().subServiceName;
+        }));
+
+        // Sort logs by visitDate descending
+        const logs = logsSnap.docs.map(d => d.data()).sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+
+        logs.forEach(log => {
+            const serviceNames = (log.itemsRendered || []).map(c => nameMap[c] || c).join(", ") || "—";
+            const totalAmt     = Number(log.calculatedValueCost || 0).toLocaleString("en-IN");
+            const amtReceived  = Number(log.addlAmtReceived     || 0).toLocaleString("en-IN");
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="text-nowrap">${log.visitDate || "—"}</td>
+                <td>${serviceNames}</td>
+                <td class="text-end">₹${totalAmt}</td>
+                <td class="text-end">₹${amtReceived}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        panel.style.display = "block";
+    } catch (err) { console.error("Visit history load error:", err); }
 }
 
 function updateUtilizeNewUnpaidDisplay() {
@@ -1871,6 +1930,9 @@ async function processVisitDeductionFormSubmission(e) {
         } else {
             alert(`Visit logged successfully. Remaining Account Balance: ${updatedBalance}`);
         }
+
+        // Refresh visit history in place (before resetting the form)
+        await renderVisitHistory(allotId, custNo);
 
         document.getElementById("frm-utilize-service-visit").reset();
         const _uSrch = document.getElementById("utilize-customer-search");
