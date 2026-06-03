@@ -1155,7 +1155,9 @@ async function processCommonPackADMFormSubmission(e) {
         }
 
         await setDoc(packDocRef, {
-            ownerUserNo: activeSessionUser.ownerUserNo, packName: nameId, packType: "Type2",
+            ownerUserNo: activeSessionUser.ownerUserNo,
+            id: packDocRef.id,
+            packName: nameId, packType: "Type2",
             offerPrice: price, totalAmount: totalAmt,
             subServicesArray: selectedSubServices,
             active: activeFlag, createdAt: new Date().toISOString()
@@ -1553,9 +1555,20 @@ async function renderUtilizeSubServicesCheckboxes() {
         const totalAmount = pData.totalAmount  !== undefined ? Number(pData.totalAmount) : null;
         const amtReceived = pData.amountReceived !== undefined ? Number(pData.amountReceived) : null;
         const remainingBalance = Number(pData.remainingBalance);
-        const unpaidBalance = pData.unpaidBalance !== undefined
+        const rawUnpaid = pData.unpaidBalance !== undefined
             ? Number(pData.unpaidBalance)
             : (soldPrice !== null && amtReceived !== null ? soldPrice - amtReceived : 0);
+
+        // 2b: Subtract sum of all addlAmtReceived from logs for this allotId to get net unpaid
+        const customerNo = document.getElementById("utilize-customer-select").value;
+        const logsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId",     "==", allotId),
+            where("customerNo",  "==", customerNo));
+        const logsSnap = await getDocs(logsQ);
+        let sumAddlPaid = 0;
+        logsSnap.forEach(d => { sumAddlPaid += Number(d.data().addlAmtReceived || 0); });
+        const unpaidBalance = Math.max(0, rawUnpaid - sumAddlPaid);
         utilizePrevUnpaidBalance = unpaidBalance;
 
         // (c) Discount % from (totalAmount - soldPrice)*100/totalAmount
@@ -1565,11 +1578,12 @@ async function renderUtilizeSubServicesCheckboxes() {
             if (discountPct < 0) discountPct = 0; // no negative discount shown
         }
 
+        const today = new Date().toISOString().slice(0, 10);
         const isExhausted = remainingBalance <= 0;
-        const isExpired   = pData.expiryDate && pData.expiryDate !== null;
+        const isExpired   = pData.expiryDate && pData.expiryDate !== null && pData.expiryDate < today;
         if (isExhausted || isExpired) {
             let reason = [];
-            if (isExhausted) reason.push(`remaining balance is ${remainingBalance} (exhausted)`);
+            if (isExhausted) reason.push(`remaining balance is ₹${remainingBalance} (exhausted)`);
             if (isExpired)   reason.push(`package expired on ${pData.expiryDate}`);
             alert(`⚠️ Package Exhausted/Expired: ${reason.join(" and ")}.`);
         }
@@ -1718,10 +1732,22 @@ async function processVisitDeductionFormSubmission(e) {
 
         if (updatedBalance < 0) return alert(`Transaction Declined: This package balance card does not have enough remaining capacity. Balance Available: ${pData.remainingBalance}`);
 
-        const prevUnpaid = Number(pData.unpaidBalance !== undefined ? pData.unpaidBalance : 0);
-        const prevAmtReceived = Number(pData.amountReceived !== undefined ? pData.amountReceived : 0);
-        const newUnpaidBalance = Math.max(0, prevUnpaid - addlAmtReceived);
-        const newAmountReceived = prevAmtReceived + addlAmtReceived;
+        // Query all prior logs for this allotId+customerNo to get true cumulative payments
+        const priorLogsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId",     "==", allotId),
+            where("customerNo",  "==", custNo));
+        const priorLogsSnap = await getDocs(priorLogsQ);
+        let sumPriorAddlPaid = 0;
+        priorLogsSnap.forEach(d => { sumPriorAddlPaid += Number(d.data().addlAmtReceived || 0); });
+
+        // Issue 2: compute unpaid and amountReceived from source-of-truth (logs sum)
+        const initialAmtReceived = Number(pData.amountReceived !== undefined ? pData.amountReceived : 0);
+        const soldPrice          = Number(pData.soldPrice      !== undefined ? pData.soldPrice      : 0);
+        const trueAmtReceived    = initialAmtReceived + sumPriorAddlPaid;        // all payments so far
+        const trueUnpaid         = Math.max(0, soldPrice - trueAmtReceived);     // true current unpaid
+        const newUnpaidBalance   = Math.max(0, trueUnpaid - addlAmtReceived);    // after this visit
+        const newAmountReceived  = trueAmtReceived + addlAmtReceived;            // cumulative total paid
 
         const nowExhausted = updatedBalance <= 0;
         const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance, amountReceived: newAmountReceived };
@@ -1730,10 +1756,24 @@ async function processVisitDeductionFormSubmission(e) {
         if (nowExhausted)
             alert(`⚠️ Package Fully Exhausted: "${pData.packName}" consumed. Expiry set to ${visitDate}.`);
 
-        const logIdString = "LOG-" + Math.floor(100000 + Math.random() * 900000);
-        await setDoc(doc(db, "serviceUtilizationLogs", `${activeSessionUser.ownerUserNo}_LOG_${logIdString}`), {
-            ownerUserNo: activeSessionUser.ownerUserNo, logId: logIdString, customerNo: custNo, allotId: allotId,
-            packName: pData.packName, visitDate: visitDate, itemsRendered: renderedItemCodeTrackers,
+        // Issue 1: sequential log ID — max existing serial for this owner + 1
+        const allLogsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo));
+        const allLogsSnap = await getDocs(allLogsQ);
+        let maxLogSerial = 0;
+        const logDocPattern = new RegExp(`^${activeSessionUser.ownerUserNo}_LOG_(\\d+)$`);
+        allLogsSnap.forEach(d => {
+            const m = d.id.match(logDocPattern);
+            if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > maxLogSerial) maxLogSerial = n; }
+        });
+        const logSerial = maxLogSerial + 1;
+        const logDocId  = `${activeSessionUser.ownerUserNo}_LOG_${logSerial}`;
+
+        await setDoc(doc(db, "serviceUtilizationLogs", logDocId), {
+            ownerUserNo: activeSessionUser.ownerUserNo, logId: logDocId,
+            customerNo: custNo, allotId: allotId,
+            packName: pData.packName, visitDate: visitDate,
+            itemsRendered: renderedItemCodeTrackers,
             unitsSubtracted: checkedInputs.length, calculatedValueCost: totalSubServicesValueCost,
             addlAmtReceived: addlAmtReceived, loggedAt: new Date().toISOString()
         });
@@ -1945,7 +1985,8 @@ async function loadWorkspaceDropdownMappings() {
             packSnap.forEach(d => {
                 const data = d.data();
                 allotPacksCache.set(data.packName, data);
-                allotSelectEl.innerHTML += `<option value="${data.packName}">${data.packName} (ID: ${data.packName})</option>`;
+                const packId = data.id || d.id;
+                allotSelectEl.innerHTML += `<option value="${data.packName}">${data.packName} (Pack ID: ${packId})</option>`;
             });
             allotSelectEl._allOptions = Array.from(allotSelectEl.options);
         }
