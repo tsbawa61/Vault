@@ -35,6 +35,8 @@ let realtimePacksUnsubscribe = null;
 let sessionWatchdogTimer = null;
 let allotCurrentPackTotalAmount = 0;
 let allotPacksCache = new Map();
+let _utilizeOverrideConfirmed = false;   // tracks negative-balance override consent
+let _utilizeOverrideMeta      = null;    // holds override email payload until post-save
 let utilizePrevUnpaidBalance = 0;
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes Boundary
 
@@ -1392,11 +1394,6 @@ function resetAllotExistingPackUI() {
     const alertEl = document.getElementById("allot-existing-alert");
     if (alertEl) {
         alertEl.style.display = "none";
-        // (b) Move alert back to its original position (before allot-existing-nav) if displaced
-        const navEl2 = document.getElementById("allot-existing-nav");
-        if (navEl2 && navEl2.parentNode) {
-            navEl2.parentNode.insertBefore(alertEl, navEl2);
-        }
     }
     const navEl = document.getElementById("allot-existing-nav");
     if (navEl) navEl.style.display = "none";
@@ -1568,18 +1565,11 @@ function showAllotExistingPackAtIndex(idx) {
     const extraEl = document.getElementById("allot-existing-extra-fields");
     if (extraEl) extraEl.style.display = "flex";
 
-    // (b) Alert message: updated text, placed above allot-pack-preview via JS repositioning
+    // (b) Alert message: updated text — statically placed above Select Customer in HTML
     const alertEl = document.getElementById("allot-existing-alert");
-    const previewEl2 = document.getElementById("allot-pack-preview");
     if (alertEl) {
         alertEl.style.display = "block";
         alertEl.innerHTML = `⚠️ <strong>Some Packages Already in Progress (Details below), Cannot allot another Package</strong>`;
-        // Move alert element to be immediately before allot-pack-preview in the DOM
-        if (previewEl2 && previewEl2.parentNode && alertEl.parentNode !== previewEl2.parentNode) {
-            previewEl2.parentNode.insertBefore(alertEl, previewEl2);
-        } else if (previewEl2 && previewEl2.parentNode) {
-            previewEl2.parentNode.insertBefore(alertEl, previewEl2);
-        }
     }
 
     // Nav buttons
@@ -2191,7 +2181,34 @@ async function processVisitDeductionFormSubmission(e) {
             updatedBalance = updatedBalance - totalSubServicesValueCost;
         }
 
-        if (updatedBalance < 0) return alert(`Transaction Declined: This package balance card does not have enough remaining capacity. Balance Available: ${pData.remainingBalance}`);
+        if (updatedBalance < 0) {
+            // Show red alert and prompt user to confirm override save
+            const overrideMsg =
+                `⛔ Transaction Declined: This package balance card does not have enough remaining capacity.\n` +
+                `Balance Available: ${pData.remainingBalance}\n` +
+                `Balance After This Visit: ${updatedBalance}\n\n` +
+                `Do you still want to save this visit record (override)?`;
+            const confirmed = window.confirm(overrideMsg);
+            if (!confirmed) return;
+
+            // User confirmed override — proceed to save, then email owner
+            const ownerEmail = activeSessionUser.email || "bawa.codes@gmail.com";
+
+            // Save the record first (fall through to rest of function),
+            // flag for post-save owner email
+            _utilizeOverrideConfirmed = true;
+            _utilizeOverrideMeta = {
+                ownerEmail,
+                custNo,
+                allotId,
+                packName: pData.packName,
+                balanceBefore: pData.remainingBalance,
+                balanceAfter: updatedBalance
+            };
+        } else {
+            _utilizeOverrideConfirmed = false;
+            _utilizeOverrideMeta = null;
+        }
 
         // Query all prior logs for this allotId+customerNo to get true cumulative payments
         const priorLogsQ = query(collection(db, "serviceUtilizationLogs"),
@@ -2239,6 +2256,20 @@ async function processVisitDeductionFormSubmission(e) {
             unitsSubtracted: checkedInputs.length, calculatedValueCost: totalSubServicesValueCost,
             addlAmtReceived: addlAmtReceived, loggedAt: new Date().toISOString()
         });
+
+        // Override-save: notify owner by email if user confirmed negative-balance save
+        if (_utilizeOverrideConfirmed && _utilizeOverrideMeta) {
+            const m = _utilizeOverrideMeta;
+            try {
+                await emailjs.send('service_050166', 'template_050166', {
+                    to_email: m.ownerEmail,
+                    subject: "⛔ OVERRIDE ALERT — Visit Saved with Negative Package Balance",
+                    body: `Override Save Notification:\n\nA visit record has been saved despite insufficient package balance.\n\nCustomer ID: ${m.custNo}\nAllotment ID: ${m.allotId}\nPackage Name: ${m.packName}\nBalance Before Visit: ${m.balanceBefore}\nBalance After Visit: ${m.balanceAfter}\n\nPlease review this account at the earliest.`
+                });
+            } catch (_emailErr) { /* silent — do not block UI if email fails */ }
+            _utilizeOverrideConfirmed = false;
+            _utilizeOverrideMeta = null;
+        }
 
         // Rule Validation: 20% Low-Balance Warning alerts dispatch pipeline via EmailJS 
         const warningThreshold = Number(pData.totalAmount) * 0.20;

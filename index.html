@@ -178,6 +178,8 @@
                 <div class="card-header bg-dark text-white fw-bold">Sell Package to a Customer</div>
                 <div class="card-body">
                     <form id="frm-allot-membership">
+                        <!-- Alert message for existing packages -->
+                        <div id="allot-existing-alert" class="alert alert-warning small py-2 mb-2" style="display:none;"></div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Customer</label>
@@ -221,7 +223,6 @@
                             </div>
                         </div>
                         <!-- Extra fields shown only when existing active package found -->
-                        <div id="allot-existing-extra-fields" style="display:none;" class="row mb-3">
                             <div class="col-md-6 mb-2">
                                 <label class="form-label small fw-bold">Remaining Services Balance</label>
                                 <input type="text" class="form-control" id="allot-remaining-balance" readonly>
@@ -231,8 +232,7 @@
                                 <input type="text" class="form-control" id="allot-unpaid-balance-field" readonly>
                             </div>
                         </div>
-                        <!-- Alert message for existing packages -->
-                        <div id="allot-existing-alert" class="alert alert-warning small py-2" style="display:none;"></div>
+                        <!-- Alert message for existing packages — rendered above Select Customer via JS -->
                         <!-- Navigation for multiple existing packages -->
                         <div id="allot-existing-nav" class="d-flex align-items-center gap-2 mb-2" style="display:none;">
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-allot-prev">&#8592; Previous</button>
