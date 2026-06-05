@@ -197,10 +197,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const allotSoldPriceInput = document.getElementById("allot-sold-price");
-    if (allotSoldPriceInput) allotSoldPriceInput.addEventListener("input", updateAllotmentDiscountAndBalance);
+    if (allotSoldPriceInput) {
+        allotSoldPriceInput.addEventListener("input", () => {
+            const val = parseFloat(allotSoldPriceInput.value);
+            if (allotSoldPriceInput.value !== "" && (isNaN(val) || val <= 0)) {
+                allotSoldPriceInput.value = "";
+            }
+            updateAllotmentDiscountAndBalance();
+        });
+    }
 
     const allotAmtReceivedInput = document.getElementById("allot-amount-received");
-    if (allotAmtReceivedInput) allotAmtReceivedInput.addEventListener("input", updateAllotmentDiscountAndBalance);
+    if (allotAmtReceivedInput) {
+        allotAmtReceivedInput.addEventListener("input", () => {
+            const val = parseFloat(allotAmtReceivedInput.value);
+            if (allotAmtReceivedInput.value !== "" && (isNaN(val) || val < 0)) {
+                allotAmtReceivedInput.value = "0";
+            }
+            updateAllotmentDiscountAndBalance();
+        });
+    }
 
     const utilizeAddlAmtInput = document.getElementById("utilize-addl-amt-received");
     if (utilizeAddlAmtInput) utilizeAddlAmtInput.addEventListener("input", updateUtilizeNewUnpaidDisplay);
@@ -403,7 +419,13 @@ function initViewRouterLinks() {
         if (srch) { srch.value = ""; srch.dispatchEvent(new Event("input")); }
         const psrch = document.getElementById("allot-pack-search");
         if (psrch) psrch.value = "";
+        // Reset existing-package UI state
+        resetAllotExistingPackUI();
     });
+
+    document.getElementById("btn-allot-modify")?.addEventListener("click", handleAllotModifyClick);
+    document.getElementById("btn-allot-prev")?.addEventListener("click", () => { navigateAllotExistingPack(-1); });
+    document.getElementById("btn-allot-next")?.addEventListener("click", () => { navigateAllotExistingPack(1); });
 
     // Core Security Configuration Form Submit Pipelines
     document.getElementById("frm-access-control-matrix")?.addEventListener("submit", processAccessControlFormSubmission);
@@ -430,6 +452,7 @@ function initViewRouterLinks() {
     document.getElementById("utilize-customer-select")?.addEventListener("change", updateCustomerAllottedPacksDropdown);
     document.getElementById("utilize-pack-select")?.addEventListener("change", renderUtilizeSubServicesCheckboxes);
     document.getElementById("allot-pack-select")?.addEventListener("change", handleAllotPackSelectChange);
+    document.getElementById("allot-customer-select")?.addEventListener("change", handleAllotCustomerSelectChange);
 
     document.getElementById("cat-select-existing")?.addEventListener("change", async (e) => {
         const selectedCode = e.target.value ? e.target.value.trim() : "";
@@ -1331,6 +1354,300 @@ async function processUserADMFormSubmission(e) {
     } catch(err) { await handleTelemetryAlert("User Identity Provisioning Endpoint", err); }
 }
 
+// =========================================================================
+// Allot Form — Existing Active Package Detection & UI
+// =========================================================================
+let _allotExistingPacks = [];   // array of active allotted pack data objects matching the condition
+let _allotExistingIdx   = 0;   // current index being displayed
+
+function resetAllotExistingPackUI() {
+    _allotExistingPacks = [];
+    _allotExistingIdx = 0;
+
+    // Re-enable fields
+    ["allot-pack-select","allot-sold-price","allot-amount-received","allot-start-date"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.removeAttribute("readonly");
+    });
+    const packSel = document.getElementById("allot-pack-select");
+    if (packSel) packSel.removeAttribute("disabled");
+
+    // (a) Restore allot-pack-search visibility
+    const packSearch = document.getElementById("allot-pack-search");
+    if (packSearch) packSearch.style.display = "";
+
+    // (a) Remove the reason text element if it exists
+    const reasonEl = document.getElementById("allot-pack-reason");
+    if (reasonEl) reasonEl.remove();
+
+    // Show Sell, hide Modify
+    const sellBtn = document.getElementById("btn-allot-sell");
+    const modBtn  = document.getElementById("btn-allot-modify");
+    if (sellBtn) { sellBtn.classList.remove("d-none"); sellBtn.disabled = false; }
+    if (modBtn)  modBtn.classList.add("d-none");
+
+    // Hide extra fields, alert, nav
+    const extraEl = document.getElementById("allot-existing-extra-fields");
+    if (extraEl) extraEl.style.display = "none";
+    const alertEl = document.getElementById("allot-existing-alert");
+    if (alertEl) {
+        alertEl.style.display = "none";
+        // (b) Move alert back to its original position (before allot-existing-nav) if displaced
+        const navEl2 = document.getElementById("allot-existing-nav");
+        if (navEl2 && navEl2.parentNode) {
+            navEl2.parentNode.insertBefore(alertEl, navEl2);
+        }
+    }
+    const navEl = document.getElementById("allot-existing-nav");
+    if (navEl) navEl.style.display = "none";
+
+    // Clear extra field values
+    const rbEl = document.getElementById("allot-remaining-balance");
+    if (rbEl) rbEl.value = "";
+    const ubEl = document.getElementById("allot-unpaid-balance-field");
+    if (ubEl) ubEl.value = "";
+
+    // Clear pack preview
+    const previewEl = document.getElementById("allot-pack-preview");
+    if (previewEl) previewEl.style.display = "none";
+    const discEl = document.getElementById("allot-sold-discount");
+    if (discEl) discEl.textContent = "";
+    const unpaidEl = document.getElementById("allot-unpaid-display");
+    if (unpaidEl) unpaidEl.textContent = "";
+    allotCurrentPackTotalAmount = 0;
+}
+
+async function handleAllotCustomerSelectChange() {
+    const custNo = document.getElementById("allot-customer-select").value;
+    // Always reset existing-pack UI first (preserves customer selection)
+    resetAllotExistingPackUI();
+    // Also clear pack-related fields
+    const packSel = document.getElementById("allot-pack-select");
+    if (packSel) packSel.value = "";
+    const startEl = document.getElementById("allot-start-date");
+    if (startEl) startEl.value = "";
+    const expiryEl = document.getElementById("allot-expiry-date");
+    if (expiryEl) expiryEl.value = "";
+    const soldEl = document.getElementById("allot-sold-price");
+    if (soldEl) soldEl.value = "";
+    const amtEl = document.getElementById("allot-amount-received");
+    if (amtEl) amtEl.value = "";
+
+    if (!custNo || !activeSessionUser) return;
+
+    try {
+        const today = new Date().toISOString().split("T")[0];
+        const q = query(
+            collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("customerNo", "==", custNo),
+            where("packType", "==", "Type3")
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) return;
+
+        // Filter packs that are "in progress":
+        // unpaidBalance > 0 OR
+        // (expiryDate not null AND expiryDate >= today AND remainingBalance > 0) OR
+        // (expiryDate is null AND remainingBalance > 0)
+        const activePacks = [];
+        for (const d of snap.docs) {
+            const p = d.data();
+            const unpaid = Number(p.unpaidBalance || 0);
+            const remaining = Number(p.remainingBalance || 0);
+            const expiry = p.expiryDate || null;
+
+            const condition =
+                unpaid > 0 ||
+                (expiry !== null && expiry >= today && remaining > 0) ||
+                (expiry === null && remaining > 0);
+
+            if (condition) {
+                // Compute total amountReceived: pack amountReceived + sum of addlAmtReceived in logs
+                const logsQ = query(
+                    collection(db, "serviceUtilizationLogs"),
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("allotId", "==", p.allotId),
+                    where("customerNo", "==", custNo)
+                );
+                const logsSnap = await getDocs(logsQ);
+                let sumAddl = 0;
+                logsSnap.forEach(ld => { sumAddl += Number(ld.data().addlAmtReceived || 0); });
+                activePacks.push({ ...p, _totalAmtReceived: Number(p.amountReceived || 0) + sumAddl, _reason: buildAllotExistingReason(p, today) });
+            }
+        }
+
+        if (activePacks.length === 0) return;
+
+        // There are in-progress packages — block new allotment
+        _allotExistingPacks = activePacks;
+        _allotExistingIdx = 0;
+        showAllotExistingPackAtIndex(0);
+
+    } catch (err) {
+        await handleTelemetryAlert("Allot Customer Select Change", err);
+    }
+}
+
+function buildAllotExistingReason(p, today) {
+    const reasons = [];
+    const unpaid = Number(p.unpaidBalance || 0);
+    const remaining = Number(p.remainingBalance || 0);
+    const expiry = p.expiryDate || null;
+    if (unpaid > 0) reasons.push(`Unpaid Balance: ₹${unpaid.toLocaleString("en-IN")}`);
+    if (expiry !== null && expiry >= today && remaining > 0) reasons.push(`Package Not Expired (Expiry: ${expiry})`);
+    if (expiry === null && remaining > 0) reasons.push(`No Expiry Set, Balance Remaining`);
+    return reasons.join(" | ");
+}
+
+function showAllotExistingPackAtIndex(idx) {
+    const p = _allotExistingPacks[idx];
+    if (!p) return;
+
+    // Disable all fields except expiry date
+    ["allot-sold-price","allot-amount-received","allot-start-date"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute("readonly", "true");
+    });
+    const packSel = document.getElementById("allot-pack-select");
+    if (packSel) packSel.setAttribute("disabled", "true");
+
+    // (a) Hide allot-pack-search when in existing-pack mode
+    const packSearch = document.getElementById("allot-pack-search");
+    if (packSearch) packSearch.style.display = "none";
+
+    // Populate fields from existing pack
+    if (packSel) {
+        // Try to select the matching option
+        let found = false;
+        for (const opt of packSel.options) {
+            if (opt.value === p.packName) { packSel.value = p.packName; found = true; break; }
+        }
+        if (!found) {
+            // Add a temporary option
+            const tempOpt = document.createElement("option");
+            tempOpt.value = p.packName;
+            tempOpt.textContent = p.packName;
+            packSel.insertBefore(tempOpt, packSel.firstChild);
+            packSel.value = p.packName;
+        }
+    }
+
+    // (a) Inject reason text below allot-pack-select (create or reuse dedicated element)
+    let reasonEl = document.getElementById("allot-pack-reason");
+    if (!reasonEl) {
+        reasonEl = document.createElement("div");
+        reasonEl.id = "allot-pack-reason";
+        reasonEl.className = "mt-1 small";
+        // Insert it right after the allot-pack-select's parent col
+        const packSelParent = packSel ? packSel.closest(".col-md-6") : null;
+        if (packSelParent) packSelParent.appendChild(reasonEl);
+    }
+    if (reasonEl) {
+        reasonEl.style.display = "block";
+        reasonEl.innerHTML = `<span class="text-muted">Reason: </span><span class="text-dark">${p._reason}</span> <strong class="text-success">(You may update Expiry Date here, if desired)</strong>`;
+    }
+
+    const soldEl = document.getElementById("allot-sold-price");
+    if (soldEl) soldEl.value = p.soldPrice !== undefined ? p.soldPrice : "";
+    const amtEl = document.getElementById("allot-amount-received");
+    if (amtEl) amtEl.value = p._totalAmtReceived !== undefined ? p._totalAmtReceived : "";
+    const startEl = document.getElementById("allot-start-date");
+    if (startEl) startEl.value = p.startDate || "";
+    const expiryEl = document.getElementById("allot-expiry-date");
+    if (expiryEl) {
+        expiryEl.value = p.expiryDate || "";
+        expiryEl.removeAttribute("readonly"); // Expiry remains editable
+    }
+
+    // Extra fields
+    const rbEl = document.getElementById("allot-remaining-balance");
+    if (rbEl) rbEl.value = p.remainingBalance !== undefined ? p.remainingBalance : "";
+    const ubEl = document.getElementById("allot-unpaid-balance-field");
+    if (ubEl) ubEl.value = p.unpaidBalance !== undefined ? `₹${Number(p.unpaidBalance).toLocaleString("en-IN")}` : "";
+    const extraEl = document.getElementById("allot-existing-extra-fields");
+    if (extraEl) extraEl.style.display = "flex";
+
+    // (b) Alert message: updated text, placed above allot-pack-preview via JS repositioning
+    const alertEl = document.getElementById("allot-existing-alert");
+    const previewEl2 = document.getElementById("allot-pack-preview");
+    if (alertEl) {
+        alertEl.style.display = "block";
+        alertEl.innerHTML = `⚠️ <strong>Some Packages Already in Progress (Details below), Cannot allot another Package</strong>`;
+        // Move alert element to be immediately before allot-pack-preview in the DOM
+        if (previewEl2 && previewEl2.parentNode && alertEl.parentNode !== previewEl2.parentNode) {
+            previewEl2.parentNode.insertBefore(alertEl, previewEl2);
+        } else if (previewEl2 && previewEl2.parentNode) {
+            previewEl2.parentNode.insertBefore(alertEl, previewEl2);
+        }
+    }
+
+    // Nav buttons
+    const navEl = document.getElementById("allot-existing-nav");
+    const navLabel = document.getElementById("allot-existing-nav-label");
+    if (navEl) {
+        if (_allotExistingPacks.length > 1) {
+            navEl.style.display = "flex";
+            if (navLabel) navLabel.textContent = `Package ${idx + 1} of ${_allotExistingPacks.length}`;
+            document.getElementById("btn-allot-prev").disabled = (idx === 0);
+            document.getElementById("btn-allot-next").disabled = (idx === _allotExistingPacks.length - 1);
+        } else {
+            navEl.style.display = "none";
+        }
+    }
+
+    // Show Modify, hide Sell
+    const sellBtn = document.getElementById("btn-allot-sell");
+    const modBtn  = document.getElementById("btn-allot-modify");
+    if (sellBtn) { sellBtn.classList.add("d-none"); sellBtn.disabled = true; }
+    if (modBtn)  modBtn.classList.remove("d-none");
+
+    // Update discount/balance display
+    allotCurrentPackTotalAmount = Number(p.totalAmount || 0);
+    updateAllotmentDiscountAndBalance();
+
+    // Show pack preview if pack data is in cache, then HIDE it (d) — not shown in existing-pack mode
+    const packCacheData = allotPacksCache.get(p.packName);
+    if (packCacheData) {
+        handleAllotPackSelectChange();
+    }
+    // (d) Hide "📦 Package Contents" panel in existing-pack mode
+    const previewElHide = document.getElementById("allot-pack-preview");
+    if (previewElHide) previewElHide.style.display = "none";
+}
+
+function navigateAllotExistingPack(direction) {
+    const newIdx = _allotExistingIdx + direction;
+    if (newIdx < 0 || newIdx >= _allotExistingPacks.length) return;
+    _allotExistingIdx = newIdx;
+    showAllotExistingPackAtIndex(_allotExistingIdx);
+}
+
+async function handleAllotModifyClick() {
+    const p = _allotExistingPacks[_allotExistingIdx];
+    if (!p) return;
+    const newExpiry = document.getElementById("allot-expiry-date").value;
+    if (newExpiry && p.startDate && newExpiry < p.startDate) {
+        return alert("Validation Error: Expiration Date cannot be before the Activation Date.");
+    }
+    try {
+        const q = query(
+            collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId", "==", p.allotId),
+            where("customerNo", "==", p.customerNo)
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) return alert("Error: Could not locate the package record to update.");
+        await updateDoc(snap.docs[0].ref, { expiryDate: newExpiry || null });
+        alert("Success: Expiry date updated successfully.");
+        // Refresh the current pack's local data
+        _allotExistingPacks[_allotExistingIdx] = { ...p, expiryDate: newExpiry || null };
+    } catch (err) {
+        await handleTelemetryAlert("Allot Modify Expiry Update", err);
+    }
+}
+
 async function handleAllotPackSelectChange() {
     const packName = document.getElementById("allot-pack-select").value;
     const previewEl = document.getElementById("allot-pack-preview");
@@ -1567,7 +1884,11 @@ async function updateCustomerAllottedPacksDropdown() {
     }
 
     try {
-        const q = query(collection(db, "customerServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("customerNo", "==", custNo), where("active", "==", true)); 
+        const q = query(collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("customerNo", "==", custNo),
+            where("packType",   "==", "Type3"),
+            where("active",     "==", true));
         const snap = await getDocs(q);
         
         packEl.innerHTML = `<option value="">-- Choose Package Ledger Account --</option>`;
@@ -1603,13 +1924,10 @@ async function renderUtilizeSubServicesCheckboxes() {
 
         const soldPrice   = pData.soldPrice   !== undefined ? Number(pData.soldPrice)   : null;
         const totalAmount = pData.totalAmount  !== undefined ? Number(pData.totalAmount) : null;
-        const amtReceived = pData.amountReceived !== undefined ? Number(pData.amountReceived) : null;
         const remainingBalance = Number(pData.remainingBalance);
-        const rawUnpaid = pData.unpaidBalance !== undefined
-            ? Number(pData.unpaidBalance)
-            : (soldPrice !== null && amtReceived !== null ? soldPrice - amtReceived : 0);
+        const rawAmtReceived = pData.amountReceived !== undefined ? Number(pData.amountReceived) : 0;
 
-        // 2b: Subtract sum of all addlAmtReceived from logs for this allotId to get net unpaid
+        // 2b: amtReceived = amountReceived in pack + sum of all addlAmtReceived in logs
         const customerNo = document.getElementById("utilize-customer-select").value;
         const logsQ = query(collection(db, "serviceUtilizationLogs"),
             where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
@@ -1618,7 +1936,10 @@ async function renderUtilizeSubServicesCheckboxes() {
         const logsSnap = await getDocs(logsQ);
         let sumAddlPaid = 0;
         logsSnap.forEach(d => { sumAddlPaid += Number(d.data().addlAmtReceived || 0); });
-        const unpaidBalance = Math.max(0, rawUnpaid - sumAddlPaid);
+        const amtReceived = rawAmtReceived + sumAddlPaid;
+
+        // 2c: unpaidBalance = soldPrice - amtReceived (unpaid is against the price the pack was sold at)
+        const unpaidBalance = Math.max(0, (soldPrice !== null ? soldPrice : 0) - amtReceived);
         utilizePrevUnpaidBalance = unpaidBalance;
 
         // (c) Discount % from (totalAmount - soldPrice)*100/totalAmount
@@ -1650,7 +1971,7 @@ async function renderUtilizeSubServicesCheckboxes() {
                     <div class="row g-2">
                         <div class="col-6"><span class="text-muted">Total Services Amount (₹):</span> <strong>${totalAmount !== null ? "₹" + totalAmount.toLocaleString("en-IN") : "N/A"}</strong></div>
                         <div class="col-6"><span class="text-muted">Selling Price (₹):</span> <strong>${soldPrice !== null ? "₹" + soldPrice.toLocaleString("en-IN") : "N/A"} ${discBadge}</strong></div>
-                        <div class="col-6"><span class="text-muted">Amount Received Before This Visit (₹):</span> <strong>${amtReceived !== null ? "₹" + amtReceived.toLocaleString("en-IN") : "N/A"}</strong></div>
+                        <div class="col-6"><span class="text-muted">Amount Received Before This Visit (₹):</span> <strong>₹${amtReceived.toLocaleString("en-IN")}</strong></div>
                         <div class="col-6"><span class="text-muted">Unpaid Balance Before This Visit (₹):</span> <strong class="${unpaidClass}">₹${unpaidBalance.toLocaleString("en-IN")}</strong></div>
                         <div class="col-12"><span class="text-muted">Services of Amount yet to be availed (₹):</span> <strong class="text-primary">₹${remainingBalance.toLocaleString("en-IN")}</strong></div>
                     </div>`;
@@ -1881,16 +2202,17 @@ async function processVisitDeductionFormSubmission(e) {
         let sumPriorAddlPaid = 0;
         priorLogsSnap.forEach(d => { sumPriorAddlPaid += Number(d.data().addlAmtReceived || 0); });
 
-        // Issue 2: compute unpaid and amountReceived from source-of-truth (logs sum)
+        // b: amtReceived = pData.amountReceived + sum of all prior addlAmtReceived in logs
         const initialAmtReceived = Number(pData.amountReceived !== undefined ? pData.amountReceived : 0);
-        const soldPrice          = Number(pData.soldPrice      !== undefined ? pData.soldPrice      : 0);
-        const trueAmtReceived    = initialAmtReceived + sumPriorAddlPaid;        // all payments so far
-        const trueUnpaid         = Math.max(0, soldPrice - trueAmtReceived);     // true current unpaid
-        const newUnpaidBalance   = Math.max(0, trueUnpaid - addlAmtReceived);    // after this visit
-        const newAmountReceived  = trueAmtReceived + addlAmtReceived;            // cumulative total paid
+        const trueAmtReceived    = initialAmtReceived + sumPriorAddlPaid + addlAmtReceived;
+
+        // c: unpaidBalance = soldPrice - trueAmtReceived
+        const packSoldPrice    = Number(pData.soldPrice !== undefined ? pData.soldPrice : 0);
+        const newUnpaidBalance = Math.max(0, packSoldPrice - trueAmtReceived);
 
         const nowExhausted = updatedBalance <= 0;
-        const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance, amountReceived: newAmountReceived };
+        // a: Do NOT update amountReceived in customerServicePacks — it stays as initially recorded
+        const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance };
         if (nowExhausted) exhaustionUpdate.expiryDate = visitDate;
         await updateDoc(docRef, exhaustionUpdate);
         if (nowExhausted)
@@ -2018,52 +2340,64 @@ async function refreshAllAdministrativeTables() {
         }
     }
 
-    renderTable("commonServicePacks", "tbl-adm-commonpacks", (data) => {
-        const tr = document.createElement("tr");
-        const serviceCount = data.subServicesArray ? data.subServicesArray.length : 0;
-        const discount = (data.totalAmount > 0 && data.offerPrice >= 0)
-            ? ((data.totalAmount - data.offerPrice) / data.totalAmount * 100)
-            : null;
-        const discountBadge = (discount !== null && discount > 0)
-            ? ` <span class="badge bg-success ms-1">${discount.toFixed(1)}% off</span>`
-            : "No Discount";
+    // (c) tbl-adm-commonpacks: show Type3 packages only
+    {
+        const packType3Q = query(collection(db, "commonServicePacks"),
+            where("ownerUserNo", "==", ownerId),
+            where("packType", "==", "Type3"));
+        const packType3Snap = await getDocs(packType3Q);
+        const packTbody = document.getElementById("tbl-adm-commonpacks");
+        if (packTbody) {
+            packTbody.innerHTML = "";
+            packType3Snap.forEach(d => {
+                const data = d.data();
+                const tr = document.createElement("tr");
+                const serviceCount = data.subServicesArray ? data.subServicesArray.length : 0;
+                const discount = (data.totalAmount > 0 && data.offerPrice >= 0)
+                    ? ((data.totalAmount - data.offerPrice) / data.totalAmount * 100)
+                    : null;
+                const discountBadge = (discount !== null && discount > 0)
+                    ? ` <span class="badge bg-success ms-1">${discount.toFixed(1)}% off</span>`
+                    : "No Discount";
 
-        tr.innerHTML = `
-            <td>${data.packName}</td>
-            <td hidden><span class="badge bg-dark">${data.packType === "Type1" ? "Item Counts" : "Cash Value Balance"}</span></td>
-            <td>₹${data.offerPrice}${discountBadge}</td>
-            <td>₹${data.totalAmount}</td>
-            <td>${serviceCount} item${serviceCount === 1 ? "" : "s"} linked</td>
-            <td><span class="badge ${data.active ? 'bg-success' : 'bg-secondary'}">${data.active ? 'Active' : 'Hidden'}</span></td>
-            <td><button class="btn btn-outline-secondary btn-sm py-0 px-2 copy-pack-btn" title="Copy package summary to clipboard">📋 Copy</button></td>`;
+                tr.innerHTML = `
+                    <td>${data.packName}</td>
+                    <td hidden><span class="badge bg-dark">${data.packType === "Type1" ? "Item Counts" : "Cash Value Balance"}</span></td>
+                    <td>₹${data.offerPrice}${discountBadge}</td>
+                    <td>₹${data.totalAmount}</td>
+                    <td>${serviceCount} item${serviceCount === 1 ? "" : "s"} linked</td>
+                    <td><span class="badge ${data.active ? 'bg-success' : 'bg-secondary'}">${data.active ? 'Active' : 'Hidden'}</span></td>
+                    <td><button class="btn btn-outline-secondary btn-sm py-0 px-2 copy-pack-btn" title="Copy package summary to clipboard">📋 Copy</button></td>`;
 
-        tr.querySelector(".copy-pack-btn").addEventListener("click", () => {
-            const discountLine = (discount !== null && discount > 0)
-                ? `\nDiscount: ${discount.toFixed(1)}% off list price`
-                : "";
-            const summary = [
-                `📦 ${data.packName}`,
-                `Offered Price: ₹${data.offerPrice}${discountLine}`,
-                `Total Services Value: ₹${data.totalAmount}`,
-                `Includes: ${serviceCount} service item${serviceCount === 1 ? "" : "s"}`,
-                `Status: ${data.active ? "Available for subscription" : "Currently unavailable"}`
-            ].join("\n");
+                tr.querySelector(".copy-pack-btn").addEventListener("click", () => {
+                    const discountLine = (discount !== null && discount > 0)
+                        ? `\nDiscount: ${discount.toFixed(1)}% off list price`
+                        : "";
+                    const summary = [
+                        `📦 ${data.packName}`,
+                        `Offered Price: ₹${data.offerPrice}${discountLine}`,
+                        `Total Services Value: ₹${data.totalAmount}`,
+                        `Includes: ${serviceCount} service item${serviceCount === 1 ? "" : "s"}`,
+                        `Status: ${data.active ? "Available for subscription" : "Currently unavailable"}`
+                    ].join("\n");
 
-            navigator.clipboard.writeText(summary).then(() => {
-                const btn = tr.querySelector(".copy-pack-btn");
-                btn.textContent = "✅ Copied!";
-                btn.classList.replace("btn-outline-secondary", "btn-success");
-                setTimeout(() => {
-                    btn.textContent = "📋 Copy";
-                    btn.classList.replace("btn-success", "btn-outline-secondary");
-                }, 2000);
-            }).catch(() => {
-                alert("Clipboard access was blocked. Please copy manually.");
+                    navigator.clipboard.writeText(summary).then(() => {
+                        const btn = tr.querySelector(".copy-pack-btn");
+                        btn.textContent = "✅ Copied!";
+                        btn.classList.replace("btn-outline-secondary", "btn-success");
+                        setTimeout(() => {
+                            btn.textContent = "📋 Copy";
+                            btn.classList.replace("btn-success", "btn-outline-secondary");
+                        }, 2000);
+                    }).catch(() => {
+                        alert("Clipboard access was blocked. Please copy manually.");
+                    });
+                });
+
+                packTbody.appendChild(tr);
             });
-        });
-
-        return tr;
-    });
+        }
+    }
 
     {
         const usrQ = query(collection(db, "users"),
@@ -2119,7 +2453,9 @@ async function loadWorkspaceDropdownMappings() {
         }
     }
     {
-        const packQ = query(collection(db, "commonServicePacks"), where("ownerUserNo", "==", ownerId));
+        const packQ = query(collection(db, "commonServicePacks"),
+            where("ownerUserNo", "==", ownerId),
+            where("packType", "==", "Type3"));
         const packSnap = await getDocs(packQ);
         allotPacksCache.clear();
         const allotSelectEl = document.getElementById("allot-pack-select");
@@ -2134,8 +2470,22 @@ async function loadWorkspaceDropdownMappings() {
             allotSelectEl._allOptions = Array.from(allotSelectEl.options);
         }
     }
-    await populateSelect("commonServicePacks", "pack-select-existing", "packName", "packName");
-    { const _pse = document.getElementById("pack-select-existing"); if (_pse) _pse._allOptions = Array.from(_pse.options); }
+    // (b) pack-select-existing: show Type3 packages only
+    {
+        const pseQ = query(collection(db, "commonServicePacks"),
+            where("ownerUserNo", "==", ownerId),
+            where("packType", "==", "Type3"));
+        const pseSnap = await getDocs(pseQ);
+        const pse = document.getElementById("pack-select-existing");
+        if (pse) {
+            pse.innerHTML = `<option value="">-- Choose from Available List --</option>`;
+            pseSnap.forEach(d => {
+                const data = d.data();
+                pse.innerHTML += `<option value="${data.packName}">${data.packName} (ID: ${data.packName})</option>`;
+            });
+            pse._allOptions = Array.from(pse.options);
+        }
+    }
     await populateSelect("users", "allot-customer-select", "userNo", "name", "CUSTOMER");
     {
         const _acEl = document.getElementById("allot-customer-select");

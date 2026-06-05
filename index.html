@@ -9,6 +9,11 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
         .nav-link { cursor: pointer; }
+        /* Hide spinners for allot price fields */
+        #allot-sold-price::-webkit-outer-spin-button,
+        #allot-sold-price::-webkit-inner-spin-button,
+        #allot-amount-received::-webkit-outer-spin-button,
+        #allot-amount-received::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="bg-light">
@@ -68,7 +73,7 @@
         <section id="sec-dashboard" class="view-section">
             <div class="d-flex justify-content-between align-items-center mb-4 border-b pb-2">
                 <h3 class="fw-bold my-0">Salon Dashboard</h3>
-                <button class="btn btn-success btn-sm d-none" id="btn-trigger-autopopulate">Load Standard Salon Menu Items</button>
+                <button class="btn btn-success btn-sm d-none" id="btn-trigger-autopopulate" disabled>Load Standard Salon Menu Items</button>
             </div>
 
             <div class="row text-center mb-4">
@@ -193,14 +198,14 @@
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Selling Price (₹)</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="allot-sold-price" placeholder="Price charged to Customer" required>
+                                    <input type="number" class="form-control" id="allot-sold-price" placeholder="Price charged to Customer" required min="0.01" step="any" style="-moz-appearance:textfield;">
                                     <span id="allot-sold-discount" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Amount Received (₹) [Optional]</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="allot-amount-received" placeholder="Cash / UPI received now">
+                                    <input type="number" class="form-control" id="allot-amount-received" placeholder="Cash / UPI received now" min="0" step="any" style="-moz-appearance:textfield;">
                                     <span id="allot-unpaid-display" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
@@ -215,8 +220,28 @@
                                 <input type="date" class="form-control" id="allot-expiry-date">
                             </div>
                         </div>
+                        <!-- Extra fields shown only when existing active package found -->
+                        <div id="allot-existing-extra-fields" style="display:none;" class="row mb-3">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">Remaining Services Balance</label>
+                                <input type="text" class="form-control" id="allot-remaining-balance" readonly>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">Unpaid Balance (₹)</label>
+                                <input type="text" class="form-control" id="allot-unpaid-balance-field" readonly>
+                            </div>
+                        </div>
+                        <!-- Alert message for existing packages -->
+                        <div id="allot-existing-alert" class="alert alert-warning small py-2" style="display:none;"></div>
+                        <!-- Navigation for multiple existing packages -->
+                        <div id="allot-existing-nav" class="d-flex align-items-center gap-2 mb-2" style="display:none;">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-allot-prev">&#8592; Previous</button>
+                            <span id="allot-existing-nav-label" class="small text-muted"></span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-allot-next">Next &#8594;</button>
+                        </div>
                         <div class="d-flex gap-2 mt-2">
-                        <button type="submit" class="btn btn-dark w-100">Sell Package</button>
+                        <button type="submit" class="btn btn-dark w-100" id="btn-allot-sell">Sell Package</button>
+                        <button type="button" class="btn btn-warning w-100 d-none" id="btn-allot-modify">Modify</button>
                         <button type="button" class="btn btn-outline-secondary w-100" id="btn-reset-allot">Reset</button>
                         </div>
                     </form>
@@ -384,11 +409,9 @@
                                 <label class="form-label small fw-bold">Package Tracking Name</label>
                                 <input type="text" class="form-control" id="pack-name-id" placeholder="e.g., Bridal Glow Premium Pack" required>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3" style="display:none;">
                                 <label class="form-label small fw-bold">Package Type</label>
                                 <select class="form-select" id="pack-type-select" required>
-                                    <option value="Type1">By Service Count (Deducts 1 unit per visit item checked)</option>
-                                    <option value="Type2">By Cash Value Balance (Deducts actual service price per item availed)</option>
                                     <option value="Type3" selected>Prime Discount Package</option>
                                 </select>
                             </div>
