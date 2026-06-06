@@ -198,7 +198,17 @@ document.addEventListener("DOMContentLoaded", () => {
         packPriceInput.addEventListener("input", updatePackDiscountDisplay);
     }
 
-    const allotSoldPriceInput = document.getElementById("allot-sold-price");
+    const utilizeAddlAmtInput = document.getElementById("utilize-addl-amt-received");
+    if (utilizeAddlAmtInput) {
+        utilizeAddlAmtInput.addEventListener("input", () => {
+            const val = parseFloat(utilizeAddlAmtInput.value);
+            if (utilizeAddlAmtInput.value !== "" && (isNaN(val) || val < 0)) {
+                utilizeAddlAmtInput.value = "0";
+            }
+            updateUtilizeNewUnpaidDisplay();
+        });
+    }
+
     if (allotSoldPriceInput) {
         allotSoldPriceInput.addEventListener("input", () => {
             const val = parseFloat(allotSoldPriceInput.value);
@@ -219,9 +229,6 @@ document.addEventListener("DOMContentLoaded", () => {
             updateAllotmentDiscountAndBalance();
         });
     }
-
-    const utilizeAddlAmtInput = document.getElementById("utilize-addl-amt-received");
-    if (utilizeAddlAmtInput) utilizeAddlAmtInput.addEventListener("input", updateUtilizeNewUnpaidDisplay);
 });
 
 function updatePackDiscountDisplay() {
@@ -1397,12 +1404,24 @@ function resetAllotExistingPackUI() {
     }
     const navEl = document.getElementById("allot-existing-nav");
     if (navEl) navEl.style.display = "none";
+    ["btn-allot-prev","btn-allot-next","allot-existing-nav-label"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.display = "none"; if (el.tagName === "BUTTON") el.disabled = true; else el.textContent = ""; }
+    });
 
-    // Clear extra field values
+    // Clear extra field values and restore their col visibility
     const rbEl = document.getElementById("allot-remaining-balance");
-    if (rbEl) rbEl.value = "";
+    if (rbEl) {
+        rbEl.value = "";
+        const rbCol = rbEl.closest(".col-md-6");
+        if (rbCol) rbCol.style.display = "";
+    }
     const ubEl = document.getElementById("allot-unpaid-balance-field");
-    if (ubEl) ubEl.value = "";
+    if (ubEl) {
+        ubEl.value = "";
+        const ubCol = ubEl.closest(".col-md-6");
+        if (ubCol) ubCol.style.display = "";
+    }
 
     // Clear pack preview
     const previewEl = document.getElementById("allot-pack-preview");
@@ -1412,6 +1431,34 @@ function resetAllotExistingPackUI() {
     const unpaidEl = document.getElementById("allot-unpaid-display");
     if (unpaidEl) unpaidEl.textContent = "";
     allotCurrentPackTotalAmount = 0;
+}
+
+// Explicitly hides the three extra UI groups when no active package is found for the customer
+function hideAllotExtraUIElements() {
+    // i) Hide allot-remaining-balance input and its label
+    const rbEl = document.getElementById("allot-remaining-balance");
+    if (rbEl) {
+        rbEl.value = "";
+        const rbCol = rbEl.closest(".col-md-6");
+        if (rbCol) rbCol.style.display = "none";
+    }
+    // ii) Hide allot-unpaid-balance-field input and its label
+    const ubEl = document.getElementById("allot-unpaid-balance-field");
+    if (ubEl) {
+        ubEl.value = "";
+        const ubCol = ubEl.closest(".col-md-6");
+        if (ubCol) ubCol.style.display = "none";
+    }
+    // iii) Hide allot-existing-nav and its entire contents (wrapper + all children)
+    const navEl = document.getElementById("allot-existing-nav");
+    if (navEl) navEl.style.display = "none";
+    ["btn-allot-prev","btn-allot-next","allot-existing-nav-label"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.display = "none"; if (el.tagName === "BUTTON") el.disabled = true; else el.textContent = ""; }
+    });
+    // Also ensure the extra-fields wrapper row is hidden
+    const extraEl = document.getElementById("allot-existing-extra-fields");
+    if (extraEl) extraEl.style.display = "none";
 }
 
 async function handleAllotCustomerSelectChange() {
@@ -1441,7 +1488,7 @@ async function handleAllotCustomerSelectChange() {
             where("packType", "==", "Type3")
         );
         const snap = await getDocs(q);
-        if (snap.empty) return;
+        if (snap.empty) { hideAllotExtraUIElements(); return; }
 
         // Filter packs that are "in progress":
         // unpaidBalance > 0 OR
@@ -1474,7 +1521,7 @@ async function handleAllotCustomerSelectChange() {
             }
         }
 
-        if (activePacks.length === 0) return;
+        if (activePacks.length === 0) { hideAllotExtraUIElements(); return; }
 
         // There are in-progress packages — block new allotment
         _allotExistingPacks = activePacks;
@@ -1572,17 +1619,22 @@ function showAllotExistingPackAtIndex(idx) {
         alertEl.innerHTML = `⚠️ <strong>Some Packages Already in Progress (Details below), Cannot allot another Package</strong>`;
     }
 
-    // Nav buttons
-    const navEl = document.getElementById("allot-existing-nav");
+    // Nav buttons — shown only when more than one in-progress pack exists
+    const navEl    = document.getElementById("allot-existing-nav");
     const navLabel = document.getElementById("allot-existing-nav-label");
+    const prevBtn  = document.getElementById("btn-allot-prev");
+    const nextBtn  = document.getElementById("btn-allot-next");
     if (navEl) {
         if (_allotExistingPacks.length > 1) {
             navEl.style.display = "flex";
-            if (navLabel) navLabel.textContent = `Package ${idx + 1} of ${_allotExistingPacks.length}`;
-            document.getElementById("btn-allot-prev").disabled = (idx === 0);
-            document.getElementById("btn-allot-next").disabled = (idx === _allotExistingPacks.length - 1);
+            if (navLabel) { navLabel.textContent = `Package ${idx + 1} of ${_allotExistingPacks.length}`; navLabel.style.display = ""; }
+            if (prevBtn)  { prevBtn.style.display = "";  prevBtn.disabled  = (idx === 0); }
+            if (nextBtn)  { nextBtn.style.display = "";  nextBtn.disabled  = (idx === _allotExistingPacks.length - 1); }
         } else {
             navEl.style.display = "none";
+            if (navLabel) { navLabel.textContent = ""; navLabel.style.display = "none"; }
+            if (prevBtn)  { prevBtn.style.display  = "none"; prevBtn.disabled  = true; }
+            if (nextBtn)  { nextBtn.style.display  = "none"; nextBtn.disabled  = true; }
         }
     }
 
@@ -1884,7 +1936,9 @@ async function updateCustomerAllottedPacksDropdown() {
         packEl.innerHTML = `<option value="">-- Choose Package Ledger Account --</option>`;
         snap.forEach(d => {
             const data = d.data();
-            packEl.innerHTML += `<option value="${data.allotId}">${data.packName} | Allot ID: ${data.allotId} (Remaining Balance: ${data.remainingBalance})</option>`;
+            if (Number(data.remainingBalance || 0) > 0) {
+                packEl.innerHTML += `<option value="${data.allotId}">${data.packName} | Allot ID: ${data.allotId} (Remaining Balance: ${data.remainingBalance})</option>`;
+            }
         });
     } catch (err) { await handleTelemetryAlert("Dynamic Dropdown Sync Loop", err); }
 }

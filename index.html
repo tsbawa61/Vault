@@ -13,7 +13,9 @@
         #allot-sold-price::-webkit-outer-spin-button,
         #allot-sold-price::-webkit-inner-spin-button,
         #allot-amount-received::-webkit-outer-spin-button,
-        #allot-amount-received::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        #allot-amount-received::-webkit-inner-spin-button,
+        #utilize-addl-amt-received::-webkit-outer-spin-button,
+        #utilize-addl-amt-received::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="bg-light">
@@ -109,9 +111,9 @@
                         </div>
                         <div class="row align-items-end mb-3">
                             <div class="col-md-6" id="utilize-addl-amt-wrapper">
-                                <label class="form-label small fw-bold">Additional Amt Received (₹)[Optional]</label>
+                                <label class="form-label small fw-bold">Pay Unpaid Balance (₹)[Optional]</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0">
+                                    <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0" min="0" step="any" style="-moz-appearance:textfield;">
                                     <span id="utilize-new-unpaid-display" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
