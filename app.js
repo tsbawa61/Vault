@@ -195,7 +195,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const packPriceInput = document.getElementById("pack-price");
     if (packPriceInput) {
-        packPriceInput.addEventListener("input", updatePackDiscountDisplay);
+        packPriceInput.addEventListener("input", () => {
+            const val = parseFloat(packPriceInput.value);
+            if (packPriceInput.value !== "" && (isNaN(val) || val <= 0)) packPriceInput.value = "";
+            updatePackDiscountDisplay();
+        });
+    }
+
+    const subRateInput = document.getElementById("sub-rate");
+    if (subRateInput) {
+        subRateInput.addEventListener("input", () => {
+            const val = parseFloat(subRateInput.value);
+            if (subRateInput.value !== "" && (isNaN(val) || val <= 0)) subRateInput.value = "";
+        });
     }
 
     const utilizeAddlAmtInput = document.getElementById("utilize-addl-amt-received");
@@ -209,6 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const allotSoldPriceInput = document.getElementById("allot-sold-price");
     if (allotSoldPriceInput) {
         allotSoldPriceInput.addEventListener("input", () => {
             const val = parseFloat(allotSoldPriceInput.value);
@@ -367,7 +380,9 @@ function initViewRouterLinks() {
         removeCatalogDeleteButton("btn-dynamic-sub-delete");
     });
     document.getElementById("nav-adm-packs").addEventListener("click", () => showActiveFrame("sec-adm-packs"));
-    document.getElementById("nav-adm-users").addEventListener("click", () => showActiveFrame("sec-adm-users"));
+    document.getElementById("frm-change-password")?.addEventListener("submit", processChangePasswordSubmission);
+    document.getElementById("nav-adm-users-custstaff")?.addEventListener("click", () => showActiveFrame("sec-adm-users"));
+    document.getElementById("nav-adm-users-changepwd")?.addEventListener("click", () => showActiveFrame("sec-change-password"));
     document.getElementById("nav-logout").addEventListener("click", performSessionLogoutAction);
     
     // UI Change interceptor for structural dual-factor verification
@@ -396,6 +411,11 @@ function initViewRouterLinks() {
     document.getElementById("frm-adm-category").addEventListener("submit", processCategoryADMFormSubmission);
     document.getElementById("frm-adm-service").addEventListener("submit", processServiceADMFormSubmission);
     document.getElementById("frm-adm-subservice").addEventListener("submit", processSubServiceFormSubmission);
+    document.getElementById("btn-reset-subservice")?.addEventListener("click", () => {
+        document.getElementById("frm-adm-subservice").reset();
+        document.getElementById("sub-active").checked = true;
+        removeCatalogDeleteButton("btn-dynamic-sub-delete");
+    });
     document.getElementById("frm-adm-commonpack").addEventListener("submit", processCommonPackADMFormSubmission);
     document.getElementById("btn-reset-commonpack")?.addEventListener("click", () => {
         document.getElementById("frm-adm-commonpack").reset();
@@ -413,6 +433,7 @@ function initViewRouterLinks() {
         document.getElementById("usr-active").checked = true;
         removeCatalogDeleteButton("btn-dynamic-usr-delete");
         if (activeSessionUser) configureUserProfileFormForRole(activeSessionUser.role);
+        const _mMsg = document.getElementById("usr-pwd-mismatch-msg"); if (_mMsg) _mMsg.style.display = "none";
     });
     document.getElementById("frm-allot-membership").addEventListener("submit", processAllotmentFormSubmission);
     document.getElementById("btn-reset-allot")?.addEventListener("click", () => {
@@ -430,6 +451,8 @@ function initViewRouterLinks() {
         if (psrch) psrch.value = "";
         // Reset existing-package UI state
         resetAllotExistingPackUI();
+        // Also explicitly hide extra balance fields (shown only for existing packs)
+        hideAllotExtraUIElements();
     });
 
     document.getElementById("btn-allot-modify")?.addEventListener("click", handleAllotModifyClick);
@@ -873,7 +896,7 @@ function renderAuthorizedWorkspaceSession() {
     if (activeSessionUser.role === "SUPER_USER" || activeSessionUser.role === "OWNER" || activeSessionUser.role === "MANAGER") {
         document.getElementById("nav-adm-catalog").classList.remove("d-none");
         document.getElementById("nav-adm-packs").classList.remove("d-none");
-        document.getElementById("nav-adm-users").classList.remove("d-none");
+        document.getElementById("nav-adm-users-wrapper").classList.remove("d-none");
         document.getElementById("btn-trigger-autopopulate").classList.remove("d-none");
     }
 
@@ -1283,6 +1306,19 @@ async function processUserADMFormSubmission(e) {
     const age = document.getElementById("usr-age").value;
     const email = document.getElementById("usr-email").value.trim().toLowerCase();
     const pass = document.getElementById("usr-password").value;
+    const confirmPass = document.getElementById("usr-confirm-password").value;
+    const mismatchMsg = document.getElementById("usr-pwd-mismatch-msg");
+
+    // Confirm Password match check — required for MANAGER/OWNER, optional for CUSTOMER
+    if (pass || confirmPass) {
+        if (pass !== confirmPass) {
+            if (mismatchMsg) mismatchMsg.style.display = "block";
+            document.getElementById("usr-confirm-password").focus();
+            return;
+        }
+    }
+    if (mismatchMsg) mismatchMsg.style.display = "none";
+
     const phone = document.getElementById("usr-phone").value.trim();
     if ((role === "MANAGER" || role === "OWNER") && !pass.trim())
         return alert("Validation Error: Password is required for MANAGER and OWNER profiles.");
@@ -1357,10 +1393,63 @@ async function processUserADMFormSubmission(e) {
         document.getElementById("frm-adm-user-profile").reset();
         document.getElementById("usr-active").checked = true;
         removeCatalogDeleteButton("btn-dynamic-usr-delete");
+        const _mMsgPost = document.getElementById("usr-pwd-mismatch-msg"); if (_mMsgPost) _mMsgPost.style.display = "none";
 
         refreshAllAdministrativeTables();
         loadWorkspaceDropdownMappings();
     } catch(err) { await handleTelemetryAlert("User Identity Provisioning Endpoint", err); }
+}
+
+// =========================================================================
+// Change Password
+// =========================================================================
+async function processChangePasswordSubmission(e) {
+    e.preventDefault();
+    const oldPwd     = document.getElementById("chpwd-old").value;
+    const newPwd     = document.getElementById("chpwd-new").value;
+    const confirmPwd = document.getElementById("chpwd-confirm").value;
+    const mismatchEl = document.getElementById("chpwd-mismatch-msg");
+
+    // Match new vs confirm
+    if (newPwd !== confirmPwd) {
+        if (mismatchEl) mismatchEl.style.display = "block";
+        document.getElementById("chpwd-confirm").focus();
+        return;
+    }
+    if (mismatchEl) mismatchEl.style.display = "none";
+
+    if (!newPwd.trim()) return alert("Validation Error: New Password cannot be empty.");
+
+    try {
+        // Build query to find the logged-in user's document
+        let q;
+        if (activeSessionUser.role === "MANAGER") {
+            // Match both ownerUserNo and userNo for MANAGER
+            q = query(collection(db, "users"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                where("userNo",      "==", activeSessionUser.userNo),
+                where("role",        "==", "MANAGER"));
+        } else {
+            q = query(collection(db, "users"),
+                where("userNo", "==", activeSessionUser.userNo));
+        }
+        const snap = await getDocs(q);
+        if (snap.empty) return alert("Error: Could not locate your user record.");
+
+        const userDoc  = snap.docs[0];
+        const userData = userDoc.data();
+
+        // Verify old password
+        if (userData.password !== oldPwd)
+            return alert("Error: Old Password is incorrect.");
+
+        // Update password
+        await updateDoc(userDoc.ref, { password: newPwd });
+        alert("✅ Password updated successfully.");
+        document.getElementById("frm-change-password").reset();
+        if (mismatchEl) mismatchEl.style.display = "none";
+
+    } catch(err) { await handleTelemetryAlert("Change Password Submission", err); }
 }
 
 // =========================================================================

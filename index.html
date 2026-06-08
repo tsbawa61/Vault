@@ -15,7 +15,13 @@
         #allot-amount-received::-webkit-outer-spin-button,
         #allot-amount-received::-webkit-inner-spin-button,
         #utilize-addl-amt-received::-webkit-outer-spin-button,
-        #utilize-addl-amt-received::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        #utilize-addl-amt-received::-webkit-inner-spin-button,
+        #sub-rate::-webkit-outer-spin-button,
+        #sub-rate::-webkit-inner-spin-button,
+        #pack-total-amt::-webkit-outer-spin-button,
+        #pack-total-amt::-webkit-inner-spin-button,
+        #pack-price::-webkit-outer-spin-button,
+        #pack-price::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="bg-light">
@@ -28,7 +34,13 @@
                 <a class="nav-link" id="nav-login">Sign In</a>
                 <a class="nav-link d-none" id="nav-dashboard">Dashboard</a>
                 <a class="nav-link d-none" id="nav-adm-packs">Packages Master Data</a>
-                <a class="nav-link d-none" id="nav-adm-users">Customer/Staff Users </a>
+                <div class="nav-item dropdown d-none" id="nav-adm-users-wrapper">
+                    <a class="nav-link dropdown-toggle" id="nav-adm-users" data-bs-toggle="dropdown" role="button" aria-expanded="false">Users</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" id="nav-adm-users-custstaff">Customer/Staff</a></li>
+                        <li><a class="dropdown-item" id="nav-adm-users-changepwd">Change Password</a></li>
+                    </ul>
+                </div>
                 <a class="nav-link d-none" id="nav-adm-catalog">Services Master Data</a>
             </div>
             <span class="navbar-text text-warning me-3 small" id="lbl-active-context"></span>
@@ -113,7 +125,7 @@
                             <div class="col-md-6" id="utilize-addl-amt-wrapper">
                                 <label class="form-label small fw-bold">Pay Unpaid Balance (₹)[Optional]</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0" min="0" step="any" style="-moz-appearance:textfield;">
+                                    <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0" min="0" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                                     <span id="utilize-new-unpaid-display" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
@@ -202,14 +214,14 @@
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Selling Price (₹)</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="allot-sold-price" placeholder="Price charged to Customer" required min="0.01" step="any" style="-moz-appearance:textfield;">
+                                    <input type="number" class="form-control" id="allot-sold-price" placeholder="Price charged to Customer" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                                     <span id="allot-sold-discount" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Amount Received (₹) [Optional]</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="allot-amount-received" placeholder="Cash / UPI received now" min="0" step="any" style="-moz-appearance:textfield;">
+                                    <input type="number" class="form-control" id="allot-amount-received" placeholder="Cash / UPI received now" min="0" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                                     <span id="allot-unpaid-display" class="fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
@@ -334,20 +346,20 @@
                         </div>
 
                         <div class="mb-3">
+                            <label class="form-label small fw-bold">Individual Service Item Name</label>
+                            <input type="text" class="form-control" id="sub-name" placeholder="e.g. Anti Tan Facial" required>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label small fw-bold">Belongs to Main Service</label>
                             <select class="form-select" id="sub-parent-srv" required></select>
                             <input type="text" id="sub-parent-srv-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search main service by name…" autocomplete="off">
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Individual Service Item Name</label>
-                            <input type="text" class="form-control" id="sub-name" placeholder="e.g. Anti Tan Facial" required>
-                        </div>
-
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Price (Rs)</label>
-                                <input type="number" class="form-control" id="sub-rate" placeholder="e.g. 250" required>
+                                <input type="number" class="form-control" id="sub-rate" placeholder="e.g. 250" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                             </div>
                             <div class="col-md-6 mb-3" hidden>
                                 <label class="form-label small fw-bold">Duration to Serve the Individual Service (Minutes)</label>
@@ -360,7 +372,10 @@
                             <label class="form-check-label small" for="sub-active">Make this Individual Service active on menu card</label>
                         </div>
                         
-                        <button type="submit" class="btn btn-secondary btn-sm">Save Individual Service Item</button>
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="submit" class="btn btn-secondary btn-sm w-100">Save Individual Service Item</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="btn-reset-subservice">Reset</button>
+                        </div>
                     </form>
                 </div>
             </div>
@@ -408,8 +423,8 @@
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Package Tracking Name</label>
-                                <input type="text" class="form-control" id="pack-name-id" placeholder="e.g., Bridal Glow Premium Pack" required>
+                                <label class="form-label small fw-bold">Package Name</label>
+                                <input type="text" class="form-control" id="pack-name-id" placeholder="e.g. Gold Pack or Bridal Glow Premium Pack" required>
                             </div>
                             <div class="col-md-6 mb-3" style="display:none;">
                                 <label class="form-label small fw-bold">Package Type</label>
@@ -421,12 +436,12 @@
                         <div class="row align-items-end">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold" id="lbl-pack-total-amt">Total Price of Individual Services  (₹)</label>
-                                <input type="number" class="form-control" id="pack-total-amt" placeholder="Sum of all included individual services" readonly>
+                                <input type="number" class="form-control" id="pack-total-amt" placeholder="Sum of all included individual services" readonly min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Pack Offered Price (₹)</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control" id="pack-price" placeholder="Package Price Offered to Customers" required>
+                                    <input type="number" class="form-control" id="pack-price" placeholder="Package Price Offered to Customers" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
                                     <span id="pack-discount-display" class="text-success fw-bold small text-nowrap"></span>
                                 </div>
                             </div>
@@ -486,8 +501,8 @@
                             <select class="form-select text-danger fw-bold" id="usr-role" required>
                                 <option value="">-- Click here to choose User profile type --</option>
                                 <option value="OWNER" hidden>OWNER</option>
-                                <option value="MANAGER">MANAGER</option>
                                 <option value="CUSTOMER">CUSTOMER</option>
+                                <option value="MANAGER">MANAGER</option>
                                 <option value="STAFF" hidden> STAFF MEMBER</option>
                             </select>
                         </div>
@@ -505,6 +520,12 @@
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Mobile Phone Number</label>
+                                <input type="tel" class="form-control" id="usr-phone" placeholder="e.g., 9810001234" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Age Category</label>
                                 <select class="form-select" id="usr-age">
                                     <option value="">-- Select age category --</option>
@@ -515,22 +536,6 @@
                                     <option value="Gen X (Ages 46–60)">Gen X (Ages 46–60)</option>
                                     <option value="Seniors (61+)">Seniors (61+)</option>
                                 </select>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Email Address [Optional]</label>
-                                <input type="email" class="form-control" id="usr-email" placeholder="client@domain.com">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">App Sign-In Password [Optional For Customer]</label>
-                                <input type="password" class="form-control" id="usr-password" placeholder="Create Login Password">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Mobile Phone Number</label>
-                                <input type="tel" class="form-control" id="usr-phone" placeholder="e.g., 9810001234" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <div id="usr-distance-wrapper">
@@ -544,6 +549,21 @@
                                 </select>
                                 </div>
                             </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">App Sign-In Password [Optional For Customer]</label>
+                                <input type="password" class="form-control" id="usr-password" placeholder="Create Login Password">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Confirm Password [Optional For Customer]</label>
+                                <input type="password" class="form-control" id="usr-confirm-password" placeholder="Re-enter Password">
+                                <div id="usr-pwd-mismatch-msg" class="text-danger small mt-1" style="display:none;">⚠️ Passwords do not match.</div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Email Address [Optional]</label>
+                            <input type="email" class="form-control" id="usr-email" placeholder="client@domain.com">
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Home & Street Address [Optional]</label>
@@ -599,8 +619,32 @@
             </div>
         </section>
 
+        <!-- Change Password Section -->
+        <section id="sec-change-password" class="view-section">
+            <h4 class="fw-bold mb-3">🔑 Change Password</h4>
+            <div class="card shadow-sm p-4" style="max-width:480px;">
+                <form id="frm-change-password">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Old Password</label>
+                        <input type="password" class="form-control" id="chpwd-old" placeholder="Enter current password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">New Password</label>
+                        <input type="password" class="form-control" id="chpwd-new" placeholder="Enter new password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Confirm New Password</label>
+                        <input type="password" class="form-control" id="chpwd-confirm" placeholder="Re-enter new password" required>
+                        <div id="chpwd-mismatch-msg" class="text-danger small mt-1" style="display:none;">⚠️ New passwords do not match.</div>
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100">Update Password</button>
+                </form>
+            </div>
+        </section>
+
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script type="module" src="./app.js"></script>
 </body>
