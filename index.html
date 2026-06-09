@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlamTrack - Salon Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        .nav-link { cursor: pointer; }
+        /* Hide spinners for allot price fields */
+        #allot-sold-price::-webkit-outer-spin-button,
+        #allot-sold-price::-webkit-inner-spin-button,
+        #allot-amount-received::-webkit-outer-spin-button,
+        #allot-amount-received::-webkit-inner-spin-button,
+        #utilize-addl-amt-received::-webkit-outer-spin-button,
+        #utilize-addl-amt-received::-webkit-inner-spin-button,
+        #sub-rate::-webkit-outer-spin-button,
+        #sub-rate::-webkit-inner-spin-button,
+        #pack-total-amt::-webkit-outer-spin-button,
+        #pack-total-amt::-webkit-inner-spin-button,
+        #pack-price::-webkit-outer-spin-button,
+        #pack-price::-webkit-inner-spin-button,
+        #usr-reg-fee::-webkit-outer-spin-button,
+        #usr-reg-fee::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <!-- GlamTrack brand as clickable nav item -->
+            <a class="navbar-brand fw-bold" id="nav-glamtrack" style="cursor:pointer;">GlamTrack</a>
+            <div class="navbar-nav me-auto">
+                <!-- Sign In (pre-login only) -->
+                <a class="nav-link" id="nav-login">Sign In</a>
+
+                <!-- Customers dropdown (post-login) -->
+                <div class="nav-item dropdown d-none" id="nav-customers-wrapper">
+                    <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">Customers</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" id="nav-customer-visit">Customer Visit</a></li>
+                        <li><a class="dropdown-item" id="nav-customer-reg">Customer Registration</a></li>
+                    </ul>
+                </div>
+
+                <!-- Packages dropdown (post-login) -->
+                <div class="nav-item dropdown d-none" id="nav-packages-wrapper">
+                    <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">Packages</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" id="nav-package-purchase">Package Purchase</a></li>
+                        <li><a class="dropdown-item" id="nav-package-inventory">Package Inventory</a></li>
+                    </ul>
+                </div>
+
+                <!-- Services (post-login) -->
+                <a class="nav-link d-none" id="nav-services">Services</a>
+
+                <!-- Admin dropdown (post-login, OWNER/SUPER_USER only) -->
+                <div class="nav-item dropdown d-none" id="nav-admin-wrapper">
+                    <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">Admin</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" id="nav-staff-reg">Staff Registration</a></li>
+                        <li><a class="dropdown-item" id="nav-change-pwd">Password Change</a></li>
+                    </ul>
+                </div>
+
+                <!-- Gallery (post-login) -->
+                <a class="nav-link d-none" id="nav-gallery">Gallery</a>
+
+                <!-- Legacy hidden IDs kept for JS compatibility -->
+                <a class="d-none" id="nav-home"></a>
+                <a class="d-none" id="nav-dashboard"></a>
+                <a class="d-none" id="nav-adm-packs"></a>
+                <a class="d-none" id="nav-adm-catalog"></a>
+                <div class="d-none" id="nav-adm-users-wrapper">
+                    <a id="nav-adm-users"></a>
+                    <a id="nav-adm-users-custstaff"></a>
+                    <a id="nav-adm-users-changepwd"></a>
+                </div>
+            </div>
+            <span class="navbar-text text-warning me-3 small" id="lbl-active-context"></span>
+            <button class="btn btn-outline-danger btn-sm d-none" id="nav-logout">Log Out</button>
+        </div>
+    </nav>
+
+    <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
+        
+        <section id="sec-home" class="view-section active text-center py-5 position-relative">
+            <h1 class="display-5 fw-bold text-dark">Welcome to GlamTrack</h1>
+            <p class="lead text-muted">Manage your salon appointments, customer packages, and service balances easily.</p>
+            <div id="home-gallery" style="display:none;" class="mt-4 px-2">
+                <div class="row g-3" id="home-gallery-grid"></div>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    <span class="home-gallery-dot rounded-circle bg-dark" style="width:12px;height:12px;cursor:pointer;display:inline-block;transition:background .3s"></span>
+                    <span class="home-gallery-dot rounded-circle bg-secondary" style="width:12px;height:12px;cursor:pointer;display:inline-block;transition:background .3s"></span>
+                </div>
+            </div>
+        </section>
+
+        <section id="sec-login" class="view-section">
+            <h3 class="mb-3 fw-bold">Sign In to Your Account</h3>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Your Role</label>
+                <select class="form-select" id="txt-login-role">
+                    <option value="OWNER" selected>Salon Owner</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="STAFF">Salon Staff / Stylist</option>
+                    <option value="SUPER_USER">System Administrator</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Email Address</label>
+                <input type="email" class="form-control" id="txt-login-email" placeholder="name@salon.com">
+            </div>
+            <div class="mb-3" id="grp-login-pass">
+                <label class="form-label small fw-bold">Password</label>
+                <input type="password" class="form-control" id="txt-login-pass" placeholder="Enter your password">
+            </div>
+            <button class="btn btn-primary w-100" id="btn-execute-auth">Sign In</button>
+        </section>
+
+        <section id="sec-dashboard" class="view-section">
+            <div class="d-flex justify-content-between align-items-center mb-4 border-b pb-2">
+                <h3 class="fw-bold my-0">Salon Dashboard</h3>
+                <button class="btn btn-success btn-sm d-none" id="btn-trigger-autopopulate" disabled>Load Standard Salon Menu Items</button>
+            </div>
+
+            <div class="row text-center mb-4">
+                <div class="col-md-6 mb-3">
+                    <div class="p-3 bg-primary-subtle rounded border">
+                        <h6 class="text-uppercase text-muted small fw-bold">Active Customer Packages</h6>
+                        <h2 class="display-6 fw-bold my-0" id="stat-active-packs">0</h2>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white fw-bold">Customer's New Visit For Availing Package</div>
+                <div class="card-body">
+                    <form id="frm-utilize-service-visit">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Select Customer</label>
+                                <select class="form-select" id="utilize-customer-select" required></select>
+                                <input type="text" id="utilize-customer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search customer by name…" autocomplete="off">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Select Active Package</label>
+                                <select class="form-select" id="utilize-pack-select" required>
+                                    <option value="">-- Choose a Customer First --</option>
+                                </select>
+                                <input type="text" id="utilize-pack-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
+                            </div>
+                        </div>
+                        <div id="utilize-pack-financial" class="mb-3 p-3 bg-warning-subtle border border-warning rounded small" style="display:none;">
+                            <div class="fw-bold mb-2 text-warning-emphasis">💳 Package Financial Summary</div>
+                            <div id="utilize-pack-financial-details"></div>
+                        </div>
+                        <div class="row align-items-end mb-3">
+                            <div class="col-md-6" id="utilize-addl-amt-wrapper">
+                                <label class="form-label small fw-bold">Pay Unpaid Balance (₹)[Optional]</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control" id="utilize-addl-amt-received" placeholder="Cash / UPI received now" value="0" min="0" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                                    <span id="utilize-new-unpaid-display" class="fw-bold small text-nowrap"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Services Provided During Today's Visit</label>
+                            <div id="container-utilize-subservices" class="p-3 border rounded bg-light">
+                                <span class="text-muted small">Please choose a package above to see available items.</span>
+                            </div>
+                            <div id="utilize-services-total" class="mt-2 fw-bold small text-primary" style="display:none;"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Visit Date</label>
+                            <input type="date" class="form-control" id="utilize-visit-date" required>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Save Visit</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" id="btn-reset-utilize">Reset</button>
+                        </div>
+                    </form>
+                    <div id="utilize-visit-history" style="display:none;" class="mt-3">
+                        <div class="card border-secondary">
+                            <div class="card-header bg-secondary-subtle fw-bold small">📋 Visit History for Selected Package</div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0 small">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Visit Date</th>
+                                                <th>Services Availed</th>
+                                                <th>Total Amt (₹)</th>
+                                                <th>Amt Received (₹)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbl-utilize-visit-history"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-danger text-white fw-bold">Packages Expiring Within 10 Days</div>
+                <div class="table-responsive">
+                    <table class="table table-hover my-0 alignment-middle small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Customer ID</th>
+                                <th>Package Name</th>
+                                <th>Phone Action</th>
+                                <th>Expiry Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-dash-expiries">
+                            <tr><td colspan="4" class="text-center text-muted py-3">No pending package expirations found.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-dark text-white fw-bold">Sell Package to a Customer</div>
+                <div class="card-body">
+                    <form id="frm-allot-membership">
+                        <!-- Alert message for existing packages -->
+                        <div id="allot-existing-alert" class="alert alert-warning small py-2 mb-2" style="display:none;"></div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Select Customer</label>
+                                <select class="form-select" id="allot-customer-select" required></select>
+                                <input type="text" id="allot-customer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search customer by name…" autocomplete="off">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Select Package </label>
+                                <select class="form-select" id="allot-pack-select" required></select>
+                                <input type="text" id="allot-pack-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
+                            </div>
+                        </div>
+                        <div id="allot-pack-preview" class="mb-3 p-3 bg-info-subtle border border-info rounded small" style="display:none;">
+                            <div class="fw-bold mb-2 text-info-emphasis">📦 Package Contents</div>
+                            <div id="allot-pack-preview-details"></div>
+                        </div>
+                        <div class="row align-items-end mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Selling Price (₹)</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control" id="allot-sold-price" placeholder="Price charged to Customer" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                                    <span id="allot-sold-discount" class="fw-bold small text-nowrap"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Amount Received (₹) [Optional]</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control" id="allot-amount-received" placeholder="Cash / UPI received now" min="0" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                                    <span id="allot-unpaid-display" class="fw-bold small text-nowrap"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Activation Date</label>
+                                <input type="date" class="form-control" id="allot-start-date" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Expiration Date (optional)</label>
+                                <input type="date" class="form-control" id="allot-expiry-date">
+                            </div>
+                        </div>
+                        <!-- Extra fields shown only when existing active package found -->
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">Remaining Services Balance</label>
+                                <input type="text" class="form-control" id="allot-remaining-balance" readonly>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">Unpaid Balance (₹)</label>
+                                <input type="text" class="form-control" id="allot-unpaid-balance-field" readonly>
+                            </div>
+                        </div>
+                        <!-- Alert message for existing packages — rendered above Select Customer via JS -->
+                        <!-- Navigation for multiple existing packages -->
+                        <div id="allot-existing-nav" class="d-flex align-items-center gap-2 mb-2" style="display:none;">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-allot-prev">&#8592; Previous</button>
+                            <span id="allot-existing-nav-label" class="small text-muted"></span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-allot-next">Next &#8594;</button>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                        <button type="submit" class="btn btn-dark w-100" id="btn-allot-sell">Sell Package</button>
+                        <button type="button" class="btn btn-warning w-100 d-none" id="btn-allot-modify">Modify</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" id="btn-reset-allot">Reset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section id="sec-adm-catalog" class="view-section">
+            <h3 class="mb-4 fw-bold">Services</h3>
+            
+            <div class="card mb-4" hidden>
+                <div class="card-header bg-secondary text-white fw-bold">Step 1: Add/Modify Main Category (e.g. Hair Services, Skin & Beauty Services)</div>
+                <div class="card-body">
+                    <form id="frm-adm-category">
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="cat-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove a Category, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="cat-select-existing">
+                                <option value="">-- Creating a Brand New Category --</option>
+                            </select>
+                            <div class="form-text text-muted small">Leave blank when adding a new category.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Category Name</label>
+                            <input type="text" class="form-control" id="cat-name" placeholder="e.g., Hair Services" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Category Short Description</label>
+                            <input type="text" class="form-control" id="cat-desc" placeholder="e.g., Haircuts, coloring, and styling">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="cat-active" checked>
+                            <label class="form-check-label small" for="cat-active">Make this Category active on current menu</label>
+                        </div>
+                        <button type="submit" class="btn btn-secondary btn-sm">Save Main Category</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4" hidden>
+                <div class="card-header bg-secondary text-white fw-bold">Step 2: Add/Modify Main Service (e.g. Hair Coloring, Facials, Event Makeup)</div>
+                <div class="card-body">
+                    <form id="frm-adm-service">
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="srv-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove a Service, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="srv-select-existing">
+                                <option value="">-- Creating a Brand New Service --</option>
+                            </select>
+                            <div class="form-text text-muted small">Leave blank when adding a new service.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Belongs to Main Category </label>
+                            <select class="form-select" id="srv-parent-cat" required></select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Service Name</label>
+                            <input type="text" class="form-control" id="srv-name" placeholder="e.g., Hair Coloring" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Short Description of Service</label>
+                            <input type="text" class="form-control" id="srv-desc" placeholder="e.g., Global color,  Highlights, Root touch‑ups">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="srv-active" checked>
+                            <label class="form-check-label small" for="srv-active">Make this Service active on current menu</label>
+                        </div>
+                        <button type="submit" class="btn btn-secondary btn-sm">Save Main Service</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white fw-bold">Add/Modify Individual Service Item (e.g. Basic trims, Fruit Facial, Engagement Makeup )</div>
+                <div class="card-body">
+                    <form id="frm-adm-subservice"> 
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="sub-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove an Item, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="sub-select-existing">
+                                <option value="">-- Creating a Brand New Individual Service Item --</option>
+                                </select>
+                            <input type="text" id="sub-select-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search sub-service by name…" autocomplete="off">
+                            <div class="form-text text-muted small">Leave this blank if you are adding a fresh item.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Individual Service Item Name</label>
+                            <input type="text" class="form-control" id="sub-name" placeholder="e.g. Anti Tan Facial" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Belongs to Main Service</label>
+                            <select class="form-select" id="sub-parent-srv" required></select>
+                            <input type="text" id="sub-parent-srv-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search main service by name…" autocomplete="off">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Price (Rs)</label>
+                                <input type="number" class="form-control" id="sub-rate" placeholder="e.g. 250" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                            </div>
+                            <div class="col-md-6 mb-3" hidden>
+                                <label class="form-label small fw-bold">Duration to Serve the Individual Service (Minutes)</label>
+                                <input type="number" class="form-control" id="sub-duration" placeholder="e.g. 45">
+                            </div>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="sub-active" checked>
+                            <label class="form-check-label small" for="sub-active">Make this Individual Service active on menu card</label>
+                        </div>
+                        
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="submit" class="btn btn-secondary btn-sm w-100">Save Individual Service Item</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="btn-reset-subservice">Reset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <h4 class="fw-bold mt-5 mb-3">Active Service Menu</h4>
+            <div class="row">
+                <div class="col-md-4 mb-3" hidden> //Active Categories
+                    <div class="border p-2 bg-light rounded small">
+                        <strong class="d-block mb-2">Categories Loaded:</strong>
+                        <table class="table table-sm table-borderless my-0 bg-transparent"><tbody id="tbl-adm-categories"></tbody></table>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-3" hidden> //Active Services
+                    <div class="border p-2 bg-light rounded small">
+                        <strong class="d-block mb-2">Services Loaded:</strong>
+                        <table class="table table-sm table-borderless my-0 bg-transparent"><tbody id="tbl-adm-services"></tbody></table>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-3"> //Active Sub Services
+                    <div class="border p-2 bg-light rounded small">
+                        <strong class="d-block mb-2">Service Items Price Sheet:</strong>
+                        <table class="table table-sm table-borderless my-0 bg-transparent"><tbody id="tbl-adm-subservices"></tbody></table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="sec-adm-packs" class="view-section">
+            <h3 class="mb-4 fw-bold">Create Pre-Paid Service Packages</h3>
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white fw-bold">Define New Multi-Service Package Offer</div>
+                <div class="card-body">
+                    <form id="frm-adm-commonpack">
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="pack-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove a Package, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="pack-select-existing">
+                                <option value="">-- Creating a Brand New Package --</option>
+                            </select>
+                            <input type="text" id="pack-select-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
+                            <div class="form-text text-muted small">Leave blank when defining a new package offer.</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Package Name</label>
+                                <input type="text" class="form-control" id="pack-name-id" placeholder="e.g. Gold Pack or Bridal Glow Premium Pack" required>
+                            </div>
+                            <div class="col-md-6 mb-3" style="display:none;">
+                                <label class="form-label small fw-bold">Package Type</label>
+                                <select class="form-select" id="pack-type-select" required>
+                                    <option value="Type3" selected>Prime Discount Package</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row align-items-end">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold" id="lbl-pack-total-amt">Total Price of Individual Services  (₹)</label>
+                                <input type="number" class="form-control" id="pack-total-amt" placeholder="Sum of all included individual services" readonly min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Pack Offered Price (₹)</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control" id="pack-price" placeholder="Package Price Offered to Customers" required min="0.01" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                                    <span id="pack-discount-display" class="text-success fw-bold small text-nowrap"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" id="lbl-pack-subservices">Choose Individual Service Items Allowed in this Pack</label>
+                            <input type="text" id="pack-subservices-search" class="form-control form-control-sm mb-2" placeholder="🔍 Search service items…" autocomplete="off">
+                            <div id="container-pack-subservices" class="p-3 border rounded bg-light" style="max-height: 200px; overflow-y: auto;"></div>
+                            <div id="pack-subservices-sum" class="form-text fw-bold text-success mt-2">Selected items total: ₹0</div>
+                        </div>
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">[Optional] Promo Poster Image File</label>
+                                <input type="file" class="form-control form-control-sm" id="pack-promo-file" accept="image/*">
+                            </div>
+                            <div class="col-md-6 text-center">
+                                <img id="preview-pack-img" src="" alt="Promo Banner Image" class="img-thumbnail mt-2" style="max-height: 100px; display: none;">
+                            </div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="pack-active" checked>
+                            <label class="form-check-label small" for="pack-active">Open Package for Customer Subscription & Billing</label>
+                        </div>
+                        <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-dark w-100">Save and Register Package Offer</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" id="btn-reset-commonpack">Reset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <h4 class="fw-bold mb-3">Current Active Offers Available</h4>
+            <div class="table-responsive small border rounded">
+                <table class="table table-hover my-0"><thead class="table-light"><tr><th>Package Name/ID </th><th hidden>Calculation Type</th><th>Selling Price</th><th>Actual Price</th><th>Service Counts</th><th>Status</th><th>Options</th></tr></thead><tbody id="tbl-adm-commonpacks"></tbody></table>
+            </div>
+        </section>
+
+        <section id="sec-adm-users" class="view-section">
+            <h3 class="mb-4 fw-bold">Customer & Team Management</h3>
+
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white fw-bold">Add New Customer or Staff User Profile</div>
+                <div class="card-body">
+                    <form id="frm-adm-user-profile">
+                        <div class="mb-3 p-2 bg-warning-subtle rounded border border-warning">
+                            <label for="usr-select-existing" class="form-label small fw-bold text-dark">
+                                ✨ To Update or Remove a Profile, Choose It Here First:
+                            </label>
+                            <select class="form-select border-warning" id="usr-select-existing">
+                                <option value="">-- Creating a Brand New Profile --</option>
+                            </select>
+                            <input type="text" id="usr-select-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search user by name or role…" autocomplete="off">
+                            <div class="form-text text-muted small">Leave blank when registering a new Customer or staff member.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Registration/Registered User Profile Type</label>
+                            <select class="form-select text-danger fw-bold" id="usr-role" required>
+                                <option value="">-- Click here to choose User profile type --</option>
+                                <option value="OWNER" hidden>OWNER</option>
+                                <option value="CUSTOMER">CUSTOMER</option>
+                                <option value="MANAGER">MANAGER</option>
+                                <option value="STAFF" hidden> STAFF MEMBER</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Full Name</label>
+                            <input type="text" class="form-control" id="usr-fullname" placeholder="First and Last name" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Gender</label>
+                                <select class="form-select" id="usr-sex">
+                                    <option value="Female" selected>Female</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Mobile Phone Number</label>
+                                <input type="tel" class="form-control" id="usr-phone" placeholder="e.g., 9810001234" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Age Category</label>
+                                <select class="form-select" id="usr-age">
+                                    <option value="">-- Select age category --</option>
+                                    <option value="Kids (3–12)">Kids (3–12)</option>
+                                    <option value="Teens (13–19)">Teens (13–19)</option>
+                                    <option value="Young Adults (20–29)">Young Adults (20–29)</option>
+                                    <option value="Professionals (30–45)">Professionals (30–45)</option>
+                                    <option value="Gen X (Ages 46–60)">Gen X (Ages 46–60)</option>
+                                    <option value="Seniors (61+)">Seniors (61+)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div id="usr-distance-wrapper">
+                                <label class="form-label small fw-bold">Distance from Salon Branch (km)</label>
+                                <select class="form-select" id="usr-distance">
+                                    <option value="">-- Select distance range --</option>
+                                    <option value="Hyper-Local Range (0–3 km)">Hyper-Local Range (0–3 km)</option>
+                                    <option value="Local Range (3–7 km)">Local Range (3–7 km)</option>
+                                    <option value="Mid Range (8-11 km)">Mid Range (8-11 km)</option>
+                                    <option value="Regional Range (12+ km)">Regional Range (12+ km)</option>
+                                </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">App Sign-In Password [Optional For Customer]</label>
+                                <input type="password" class="form-control" id="usr-password" placeholder="Create Login Password">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Confirm Password [Optional For Customer]</label>
+                                <input type="password" class="form-control" id="usr-confirm-password" placeholder="Re-enter Password">
+                                <div id="usr-pwd-mismatch-msg" class="text-danger small mt-1" style="display:none;">⚠️ Passwords do not match.</div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Email Address [Optional]</label>
+                            <input type="email" class="form-control" id="usr-email" placeholder="client@domain.com">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Home & Street Address [Optional]</label>
+                            <textarea class="form-control" id="usr-address" rows="4" placeholder="Physical Address details"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Google Maps Pin Location URL</label>
+                            <input type="url" class="form-control" id="usr-mapurl" placeholder="Paste navigation coordinate links if available">
+                        </div>
+                        <div class="mb-3" id="usr-reg-fee-wrapper">
+                            <label class="form-label small fw-bold">Registration Fee [Optional]</label>
+                            <input type="number" class="form-control" id="usr-reg-fee" placeholder="e.g. 500" min="0" step="any" style="-moz-appearance:textfield; appearance:textfield;">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="usr-active" checked>
+                            <label class="form-check-label small" for="usr-active">Activate Profile record immediately</label>
+                        </div>
+                        <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success w-100 fw-bold">Save Profile Record</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" id="btn-reset-userprofile">Reset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-danger" hidden>
+                <div class="card-header bg-danger text-white fw-bold">Security & Permissions (Staff Work Roles)</div>
+                <div class="card-body">
+                    <form id="frm-access-control-matrix">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Target Staff Work Classification Role</label>
+                            <select class="form-select" id="access-target-role" required>
+                                <option value="MANAGER" selected>Salon Managers</option>
+                                <option value="STAFF">Salon Staff</option>
+                            </select>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="rights-read-common" checked>
+                            <label class="form-check-label small" for="rights-read-common">Allowed to see public package options list</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="rights-read-customer" checked>
+                            <label class="form-check-label small" for="rights-read-customer">Allowed to read Customer personal balances details</label>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="rights-write-allowed">
+                            <label class="form-check-label small text-danger fw-bold" for="rights-write-allowed">Allowed to change master settings and create files</label>
+                        </div>
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Update Group Access Rights</button>
+                    </form>
+                </div>
+            </div>
+
+            <h4 class="fw-bold mb-3">All Active Registered Profiles List</h4>
+            <div class="table-responsive small border rounded">
+                <table class="table table-hover my-0"><thead class="table-light"><tr><th>Serial ID</th><th>Role Type</th><th>Full Name</th><th>Email Context</th><th>Working Status</th><th>Actions</th></tr></thead><tbody id="tbl-adm-users"></tbody></table>
+            </div>
+        </section>
+
+        <!-- Change Password Section -->
+        <section id="sec-change-password" class="view-section">
+            <h4 class="fw-bold mb-3">🔑 Change Password</h4>
+            <div class="card shadow-sm p-4" style="max-width:480px;">
+                <form id="frm-change-password">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Old Password</label>
+                        <input type="password" class="form-control" id="chpwd-old" placeholder="Enter current password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">New Password</label>
+                        <input type="password" class="form-control" id="chpwd-new" placeholder="Enter new password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Confirm New Password</label>
+                        <input type="password" class="form-control" id="chpwd-confirm" placeholder="Re-enter new password" required>
+                        <div id="chpwd-mismatch-msg" class="text-danger small mt-1" style="display:none;">⚠️ New passwords do not match.</div>
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100">Update Password</button>
+                </form>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="module" src="./app.js"></script>
+</body>
+</html>
