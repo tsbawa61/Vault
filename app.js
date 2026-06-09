@@ -375,8 +375,14 @@ function renderHomePage(role) {
     });
 }
 function initViewRouterLinks() {
-    // GlamTrack brand — show dashboard stats
-    document.getElementById("nav-glamtrack")?.addEventListener("click", () => showActiveFrame("sec-dashboard"));
+    // GlamTrack brand — show stat-only glamtrack section
+    document.getElementById("nav-glamtrack")?.addEventListener("click", () => {
+        showActiveFrame("sec-glamtrack");
+        // Sync the stat count from the live stat-active-packs element
+        const src = document.getElementById("stat-active-packs");
+        const dst = document.getElementById("stat-active-packs-glamtrack");
+        if (src && dst) dst.textContent = src.textContent;
+    });
 
     // Sign In
     document.getElementById("nav-login").addEventListener("click", () => showActiveFrame("sec-login"));
@@ -968,13 +974,13 @@ function renderAuthorizedWorkspaceSession() {
         document.getElementById("nav-admin-wrapper")?.classList.remove("d-none"); // show Admin for pwd change only
     }
 
-    document.getElementById("btn-trigger-autopopulate").classList.remove("d-none");
+    // btn-trigger-autopopulate remains hidden permanently (no classList.remove("d-none"))
 
     document.getElementById("lbl-active-context").innerText = `Branch ID Layer: ${activeSessionUser.userNo} | Logged In Role: ${activeSessionUser.role} | ${activeSessionUser.name}`;
     configureUserProfileFormForRole(activeSessionUser.role);
     renderHomePage(activeSessionUser.role);
     startSessionWatchdog();
-    showActiveFrame("sec-dashboard");
+    showActiveFrame("sec-glamtrack");
     
     bindRealtimeAnalyticsStream();
     loadWorkspaceDropdownMappings();
@@ -1070,7 +1076,10 @@ function bindRealtimeAnalyticsStream() {
             const packsArray = [];
             snapshot.forEach(d => packsArray.push(d.data()));
 
-            document.getElementById("stat-active-packs").innerText = packsArray.filter(p => p.active).length;
+            const activeCnt = packsArray.filter(p => p.active).length;
+            document.getElementById("stat-active-packs").innerText = activeCnt;
+            const glamtrackStat = document.getElementById("stat-active-packs-glamtrack");
+            if (glamtrackStat) glamtrackStat.textContent = activeCnt;
 
             const tExp = document.getElementById("tbl-dash-expiries");
             if (!tExp) return;
@@ -1478,6 +1487,14 @@ async function processUserADMFormSubmission(e) {
 // Dynamic User Form Mode: "CUSTOMER" or "MANAGER" context
 // =========================================================================
 function applyUserFormMode(mode) {
+    // Reset form to blank state (except explicit dropdowns set below)
+    const profileForm = document.getElementById("frm-adm-user-profile");
+    if (profileForm) profileForm.reset();
+    document.getElementById("usr-active").checked = true;
+    const _mMsg = document.getElementById("usr-pwd-mismatch-msg");
+    if (_mMsg) _mMsg.style.display = "none";
+    removeCatalogDeleteButton("btn-dynamic-usr-delete");
+
     // --- Card header caption ---
     const cardHeader = document.querySelector("#sec-adm-users .card-header");
     if (cardHeader) cardHeader.textContent = mode === "CUSTOMER" ? "Add New Customer Profile" : "Add New Staff User Profile";
