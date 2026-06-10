@@ -121,17 +121,100 @@
             <button class="btn btn-primary w-100" id="btn-execute-auth">Sign In</button>
         </section>
 
-        <!-- GlamTrack landing: stat card only, no forms -->
+        <!-- GlamTrack landing section -->
         <section id="sec-glamtrack" class="view-section">
-            <div class="row text-center mb-4 mt-3">
-                <div class="col-md-6 mb-3 mx-auto">
-                    <div class="p-4 bg-primary-subtle rounded border">
-                        <h6 class="text-uppercase text-muted small fw-bold">Active Customer Packages</h6>
-                        <h2 class="display-6 fw-bold my-0" id="stat-active-packs-glamtrack">0</h2>
+
+            <!-- Stat cards row -->
+            <div class="row text-center mb-4 mt-2 g-2">
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-primary-subtle rounded border h-100">
+                        <div class="text-uppercase text-muted small fw-bold mb-1">Active Packages</div>
+                        <div class="display-6 fw-bold" id="stat-active-packs-glamtrack">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-danger-subtle rounded border h-100">
+                        <div class="text-uppercase text-muted small fw-bold mb-1">Expiring in 10 Days</div>
+                        <div class="display-6 fw-bold text-danger" id="stat-expiring-glamtrack">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-warning-subtle rounded border h-100">
+                        <div class="text-uppercase text-muted small fw-bold mb-1">Unengaged Customers</div>
+                        <div class="display-6 fw-bold text-warning" id="stat-unengaged-glamtrack">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-success-subtle rounded border h-100">
+                        <div class="text-uppercase text-muted small fw-bold mb-1">Premium Customers</div>
+                        <div class="display-6 fw-bold text-success" id="stat-premium-glamtrack">0</div>
                     </div>
                 </div>
             </div>
+
+            <!-- i) Packages Expiring in 10 Days -->
+            <div class="card mb-4 border-danger">
+                <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
+                    <span>Packages Expiring in 10 Days</span>
+                    <button type="button" class="btn btn-light btn-sm d-none" id="btn-viewmore-expiries" onclick="openGlamtrackModal('expiries')">View More</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover my-0 small">
+                        <thead class="table-light"><tr><th>Customer ID</th><th>Package Name</th><th>Phone</th><th>Expiry Date</th></tr></thead>
+                        <tbody id="tbl-dash-expiries"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ii) Unengaged Customers -->
+            <div class="card mb-4 border-warning">
+                <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between align-items-center">
+                    <span>Unengaged Customers (No Visit in last 6M)</span>
+                    <button type="button" class="btn btn-dark btn-sm d-none" id="btn-viewmore-unengaged" onclick="openGlamtrackModal('unengaged')">View More</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover my-0 small">
+                        <thead class="table-light"><tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Last Visit</th></tr></thead>
+                        <tbody id="tbl-glamtrack-unengaged"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- iii) Premium Customers -->
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+                    <span>Premium Customers (Last 1Y &gt; ₹20k)</span>
+                    <button type="button" class="btn btn-light btn-sm d-none" id="btn-viewmore-premium" onclick="openGlamtrackModal('premium')">View More</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover my-0 small">
+                        <thead class="table-light"><tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Total Spend (₹)</th></tr></thead>
+                        <tbody id="tbl-glamtrack-premium"></tbody>
+                    </table>
+                </div>
+            </div>
+
         </section>
+
+        <!-- View More Modal (shared) -->
+        <div class="modal fade" id="glamtrackModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="glamtrackModalTitle">Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover my-0 small">
+                                <thead class="table-light" id="glamtrackModalHead"></thead>
+                                <tbody id="glamtrackModalBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <section id="sec-dashboard" class="view-section">
             <div class="d-flex justify-content-between align-items-center mb-4 border-b pb-2">
@@ -215,25 +298,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="card mb-4">
-                <div class="card-header bg-danger text-white fw-bold">Packages Expiring Within 10 Days</div>
-                <div class="table-responsive">
-                    <table class="table table-hover my-0 alignment-middle small">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Customer ID</th>
-                                <th>Package Name</th>
-                                <th>Phone Action</th>
-                                <th>Expiry Date</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbl-dash-expiries">
-                            <tr><td colspan="4" class="text-center text-muted py-3">No pending package expirations found.</td></tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
 
