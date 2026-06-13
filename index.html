@@ -9,6 +9,56 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
         .nav-link { cursor: pointer; }
+        /* sec-login always shows as a white card, visible over background image */
+        #sec-login {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 1.5rem !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+            max-width: 480px;
+            margin: 2rem auto;
+        }
+        #sec-home {
+            position: fixed !important;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-height: 320px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.96);
+            border-top: 2px solid #dee2e6;
+            z-index: 100;
+            padding: 0.5rem 1rem !important;
+        }
+        #sec-home h1 { font-size: 2.2rem; margin-bottom: 0.4rem; }
+        #sec-home p  { font-size: 1.6rem; margin-bottom: 0.4rem; }
+        /* Restore white container for logged-in non-background state */
+        body:not(.bg-glamtrack) > .container {
+            background: #ffffff;
+        }
+        /* Hide white container background when bg-glamtrack is shown */
+        body.bg-glamtrack > .container {
+            background: transparent !important;
+            box-shadow: none !important;
+            padding-top: 0 !important;
+        }
+        /* Prevent sec-home from overlapping other content */
+        .container { padding-bottom: 330px; }
+        body.bg-glamtrack {
+            background-image: url('bckgroundGlamTrack.png');
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+        body.bg-glamtrack .container-fluid > .view-section.active {
+            background: rgba(255,255,255,0.92);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        /* Stat cards clickable */
+        .glamtrack-stat-clickable { cursor: pointer; transition: box-shadow .15s; }
+        .glamtrack-stat-clickable:hover { box-shadow: 0 0 0 3px rgba(0,0,0,.15); }
         /* Hide spinners for allot price fields */
         #allot-sold-price::-webkit-outer-spin-button,
         #allot-sold-price::-webkit-inner-spin-button,
@@ -67,7 +117,7 @@
                 </div>
 
                 <!-- Gallery (post-login) -->
-                <a class="nav-link d-none" id="nav-gallery">Gallery</a>
+                <a class="nav-link d-none" id="nav-gallery" style="display:none!important;">Gallery</a>
 
                 <!-- Legacy hidden IDs kept for JS compatibility -->
                 <a class="d-none" id="nav-home"></a>
@@ -85,9 +135,9 @@
         </div>
     </nav>
 
-    <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
+    <div class="container p-4 rounded shadow-sm" style="max-width: 900px;">
         
-        <section id="sec-home" class="view-section active text-center py-5 position-relative">
+        <section id="sec-home" class="text-center py-2 position-relative">
             <h1 class="display-5 fw-bold text-dark">Welcome to GlamTrack</h1>
             <p class="lead text-muted">Manage your salon appointments, customer packages, and service balances easily.</p>
             <div id="home-gallery" style="display:none;" class="mt-4 px-2">
@@ -133,19 +183,19 @@
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="p-3 bg-danger-subtle rounded border h-100">
+                    <div class="p-3 bg-danger-subtle rounded border h-100 glamtrack-stat-clickable" id="stat-expiring-card" onclick="scrollToGlamtrackSection('expiries-section')">
                         <div class="text-uppercase text-muted small fw-bold mb-1">Expiring in 10 Days</div>
                         <div class="display-6 fw-bold text-danger" id="stat-expiring-glamtrack">0</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="p-3 bg-warning-subtle rounded border h-100">
+                    <div class="p-3 bg-warning-subtle rounded border h-100 glamtrack-stat-clickable" id="stat-unengaged-card" onclick="scrollToGlamtrackSection('unengaged-section')">
                         <div class="text-uppercase text-muted small fw-bold mb-1">Unengaged Customers</div>
                         <div class="display-6 fw-bold text-warning" id="stat-unengaged-glamtrack">0</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="p-3 bg-success-subtle rounded border h-100">
+                    <div class="p-3 bg-success-subtle rounded border h-100 glamtrack-stat-clickable" id="stat-premium-card" onclick="scrollToGlamtrackSection('premium-section')">
                         <div class="text-uppercase text-muted small fw-bold mb-1">Premium Customers</div>
                         <div class="display-6 fw-bold text-success" id="stat-premium-glamtrack">0</div>
                     </div>
@@ -153,10 +203,9 @@
             </div>
 
             <!-- i) Packages Expiring in 10 Days -->
-            <div class="card mb-4 border-danger">
-                <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
+            <div class="card mb-4 border-danger" id="expiries-section">
+                <div class="card-header bg-danger text-white fw-bold">
                     <span>Packages Expiring in 10 Days</span>
-                    <button type="button" class="btn btn-light btn-sm d-none" id="btn-viewmore-expiries" onclick="openGlamtrackModal('expiries')">View More</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover my-0 small">
@@ -164,13 +213,14 @@
                         <tbody id="tbl-dash-expiries"></tbody>
                     </table>
                 </div>
+                <div class="card-footer text-end">
+                    <button type="button" class="btn btn-danger btn-sm d-none" id="btn-viewmore-expiries" onclick="openGlamtrackModal('expiries')">View More</button>
+                </div>
             </div>
 
-            <!-- ii) Unengaged Customers -->
-            <div class="card mb-4 border-warning">
-                <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between align-items-center">
+            <div class="card mb-4 border-warning" id="unengaged-section">
+                <div class="card-header bg-warning text-dark fw-bold">
                     <span>Unengaged Customers (No Visit in last 6M)</span>
-                    <button type="button" class="btn btn-dark btn-sm d-none" id="btn-viewmore-unengaged" onclick="openGlamtrackModal('unengaged')">View More</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover my-0 small">
@@ -178,19 +228,24 @@
                         <tbody id="tbl-glamtrack-unengaged"></tbody>
                     </table>
                 </div>
+                <div class="card-footer text-end">
+                    <button type="button" class="btn btn-warning btn-sm d-none" id="btn-viewmore-unengaged" onclick="openGlamtrackModal('unengaged')">View More</button>
+                </div>
             </div>
 
             <!-- iii) Premium Customers -->
-            <div class="card mb-4 border-success">
-                <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+            <div class="card mb-4 border-success" id="premium-section">
+                <div class="card-header bg-success text-white fw-bold">
                     <span>Premium Customers (Last 1Y &gt; ₹20k)</span>
-                    <button type="button" class="btn btn-light btn-sm d-none" id="btn-viewmore-premium" onclick="openGlamtrackModal('premium')">View More</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover my-0 small">
                         <thead class="table-light"><tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Total Spend (₹)</th></tr></thead>
                         <tbody id="tbl-glamtrack-premium"></tbody>
                     </table>
+                </div>
+                <div class="card-footer text-end">
+                    <button type="button" class="btn btn-success btn-sm d-none" id="btn-viewmore-premium" onclick="openGlamtrackModal('premium')">View More</button>
                 </div>
             </div>
 
@@ -216,21 +271,11 @@
             </div>
         </div>
 
-        <section id="sec-dashboard" class="view-section">
-            <div class="d-flex justify-content-between align-items-center mb-4 border-b pb-2">
-                <h3 class="fw-bold my-0">Salon Dashboard</h3>
-                <button class="btn btn-success btn-sm d-none" id="btn-trigger-autopopulate" disabled>Load Standard Salon Menu Items</button>
-            </div>
+        <section id="sec-dashboard" class="view-section" style="display:none;">
+            <!-- Legacy hidden section kept for JS scroll-target compatibility -->
+        </section>
 
-            <div class="row text-center mb-4">
-                <div class="col-md-6 mb-3">
-                    <div class="p-3 bg-primary-subtle rounded border">
-                        <h6 class="text-uppercase text-muted small fw-bold">Active Customer Packages</h6>
-                        <h2 class="display-6 fw-bold my-0" id="stat-active-packs">0</h2>
-                    </div>
-                </div>
-            </div>
-
+        <section id="sec-visit" class="view-section">
             <div class="card mb-4 border-primary">
                 <div class="card-header bg-primary text-white fw-bold">Customer's New Visit For Availing Package</div>
                 <div class="card-body">
@@ -240,6 +285,16 @@
                                 <label class="form-label small fw-bold">Select Customer</label>
                                 <select class="form-select" id="utilize-customer-select" required></select>
                                 <input type="text" id="utilize-customer-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search customer by name…" autocomplete="off">
+                                <div class="d-flex gap-3 mt-2" id="utilize-visit-type-group">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="utilize-visit-type" id="utilize-visit-new" value="New Visit" checked>
+                                        <label class="form-check-label small fw-bold" for="utilize-visit-new">New Visit</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="utilize-visit-type" id="utilize-visit-old" value="Old Visit">
+                                        <label class="form-check-label small fw-bold" for="utilize-visit-old">Old Visit</label>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Active Package</label>
@@ -300,7 +355,14 @@
                     </div>
                 </div>
             </div>
+        </section>
 
+        <!-- Hidden stat kept for JS bindRealtimeAnalyticsStream compatibility -->
+        <span id="stat-active-packs" style="display:none;">0</span>
+        <!-- Hidden autopopulate button kept for JS compatibility -->
+        <button class="d-none" id="btn-trigger-autopopulate" disabled></button>
+
+        <section id="sec-allot" class="view-section">
             <div class="card">
                 <div class="card-header bg-dark text-white fw-bold">Sell Package to a Customer</div>
                 <div class="card-body">
@@ -675,7 +737,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Email Address [Optional]</label>
+                            <label class="form-label small fw-bold" id="lbl-usr-email">Email Address [Optional]</label>
                             <input type="email" class="form-control" id="usr-email" placeholder="client@domain.com">
                         </div>
                         <div class="mb-3">

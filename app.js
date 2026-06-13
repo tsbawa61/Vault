@@ -75,6 +75,9 @@ function appendCatalogDeleteButton({ formId, buttonId, itemName, targetDocRef, o
     saveBtn.parentNode.appendChild(deleteBtn);
 }
 
+// Apply background image for pre-login state immediately on load
+document.body.classList.add("bg-glamtrack");
+
 async function fetchOwnerRecordByCode(collectionName, codeField, selectedCode) {
     const collRef = collection(db, collectionName);
     let q = query(
@@ -262,6 +265,13 @@ function updatePackDiscountDisplay() {
     const totalAmt = parseFloat(totalAmtEl.value);
 
     if (!isNaN(price) && !isNaN(totalAmt) && totalAmt > 0 && price >= 0) {
+        // Point 17: price cannot exceed totalAmt
+        if (price > totalAmt) {
+            priceEl.value = totalAmt;
+            discountEl.textContent = "⚠️ Price cannot exceed Total Amount — reset to match.";
+            discountEl.className = "text-danger fw-bold small text-nowrap";
+            return;
+        }
         const discount = ((totalAmt - price) / totalAmt) * 100;
         if (discount > 0) {
             discountEl.textContent = `${discount.toFixed(1)}% discount`;
@@ -333,6 +343,9 @@ function applyPackTypeUI(packType) {
 
 let _galleryTimer = null;
 function renderHomePage(role) {
+    // Display suppressed — content retained for future use
+    return;
+    /* eslint-disable no-unreachable */
     const sec = document.getElementById("sec-home");
     if (!sec) return;
     if (_galleryTimer) { clearInterval(_galleryTimer); _galleryTimer = null; }
@@ -373,20 +386,24 @@ function renderHomePage(role) {
     document.querySelectorAll(".home-gallery-dot").forEach((dot, i) => {
         dot.addEventListener("click", () => { pageIdx = i; showPage(pageIdx); });
     });
+    /* eslint-enable no-unreachable */
 }
 function initViewRouterLinks() {
     // GlamTrack brand — show stat-only glamtrack section
     document.getElementById("nav-glamtrack")?.addEventListener("click", async () => {
+        // If no session or SUPER_USER, do not show sec-glamtrack
+        if (!activeSessionUser || activeSessionUser.role === "SUPER_USER") {
+            showActiveFrame("sec-login");
+            return;
+        }
         showActiveFrame("sec-glamtrack");
         // Sync the stat count from the live stat-active-packs element
         const src = document.getElementById("stat-active-packs");
         const dst = document.getElementById("stat-active-packs-glamtrack");
         if (src && dst) dst.textContent = src.textContent;
         // Refresh all three lists
-        if (activeSessionUser) {
-            await renderGlamtrackUnengaged();
-            await renderGlamtrackPremium();
-        }
+        await renderGlamtrackUnengaged();
+        await renderGlamtrackPremium();
     });
 
     // Sign In
@@ -396,7 +413,7 @@ function initViewRouterLinks() {
     document.getElementById("nav-logout").addEventListener("click", performSessionLogoutAction);
 
     // Customers > Customer Visit
-    document.getElementById("nav-customer-visit")?.addEventListener("click", () => showActiveFrame("sec-dashboard", "frm-utilize-service-visit"));
+    document.getElementById("nav-customer-visit")?.addEventListener("click", () => showActiveFrame("sec-visit"));
 
     // Customers > Customer Registration
     document.getElementById("nav-customer-reg")?.addEventListener("click", () => {
@@ -405,7 +422,12 @@ function initViewRouterLinks() {
     });
 
     // Packages > Package Purchase
-    document.getElementById("nav-package-purchase")?.addEventListener("click", () => showActiveFrame("sec-dashboard", "frm-allot-membership"));
+    document.getElementById("nav-package-purchase")?.addEventListener("click", () => {
+        showActiveFrame("sec-allot");
+        // Reset the allot form to clean state (same as clicking Reset button)
+        resetAllotExistingPackUI();
+        hideAllotExtraUIElements();
+    });
 
     // Packages > Package Inventory
     document.getElementById("nav-package-inventory")?.addEventListener("click", () => showActiveFrame("sec-adm-packs"));
@@ -418,11 +440,8 @@ function initViewRouterLinks() {
         removeCatalogDeleteButton("btn-dynamic-sub-delete");
     });
 
-    // Gallery
-    document.getElementById("nav-gallery")?.addEventListener("click", () => {
-        showActiveFrame("sec-home");
-        if (activeSessionUser) renderHomePage(activeSessionUser.role);
-    });
+    // Gallery — nav-gallery is permanently hidden; no action needed
+    document.getElementById("nav-gallery")?.addEventListener("click", () => {});
 
     // Admin > Staff Registration
     document.getElementById("nav-staff-reg")?.addEventListener("click", () => {
@@ -524,6 +543,9 @@ function initViewRouterLinks() {
     document.getElementById("frm-utilize-service-visit")?.addEventListener("submit", processVisitDeductionFormSubmission);
     document.getElementById("btn-reset-utilize")?.addEventListener("click", () => {
         document.getElementById("frm-utilize-service-visit").reset();
+        // Re-check "New Visit" radio (reset() clears radio group)
+        const newVisitRadio = document.getElementById("utilize-visit-new");
+        if (newVisitRadio) newVisitRadio.checked = true;
         document.getElementById("container-utilize-subservices").innerHTML = "";
         utilizePrevUnpaidBalance = 0;
         const financialEl = document.getElementById("utilize-pack-financial");
@@ -668,6 +690,13 @@ function initViewRouterLinks() {
                     removeCatalogDeleteButton("btn-dynamic-usr-delete");
                     refreshAllAdministrativeTables();
                     loadWorkspaceDropdownMappings();
+                    // Re-apply current mode so form resets to correct dynamic state
+                    // This also refreshes "All Active Registered Profiles List" with the correct role filter
+                    const _delMode = document.getElementById("sec-adm-users")?.dataset?.userMode;
+                    if (_delMode) {
+                        applyUserFormMode(_delMode);
+                        _refreshUserTableForMode(_delMode);
+                    }
                 },
                 preDeleteConfirm: itemData.role === "OWNER"
                     ? () => {
@@ -962,11 +991,20 @@ function renderAuthorizedWorkspaceSession() {
 
     const role = activeSessionUser.role;
 
-    // All logged-in users see Customers, Packages, Services, Gallery
+    // Background image: keep for SUPER_USER, remove for all others
+    if (role === "SUPER_USER") {
+        document.body.classList.add("bg-glamtrack");
+        document.getElementById("sec-glamtrack").style.display = "none";
+    } else {
+        document.body.classList.remove("bg-glamtrack");
+        document.getElementById("sec-glamtrack").style.display = "";
+    }
+
+    // All logged-in users see Customers, Packages, Services
     document.getElementById("nav-customers-wrapper").classList.remove("d-none");
     document.getElementById("nav-packages-wrapper").classList.remove("d-none");
     document.getElementById("nav-services").classList.remove("d-none");
-    document.getElementById("nav-gallery").classList.remove("d-none");
+    // nav-gallery remains permanently hidden
 
     // Admin menu: OWNER and SUPER_USER only (not MANAGER)
     if (role === "OWNER" || role === "SUPER_USER") {
@@ -979,11 +1017,14 @@ function renderAuthorizedWorkspaceSession() {
         document.getElementById("nav-admin-wrapper")?.classList.remove("d-none"); // show Admin for pwd change only
     }
 
+    // Hide the pre-login welcome block after login
+    const secHome = document.getElementById("sec-home");
+    if (secHome) secHome.style.display = "none";
+
     // btn-trigger-autopopulate remains hidden permanently (no classList.remove("d-none"))
 
     document.getElementById("lbl-active-context").innerText = `Branch ID Layer: ${activeSessionUser.userNo} | Logged In Role: ${activeSessionUser.role} | ${activeSessionUser.name}`;
     configureUserProfileFormForRole(activeSessionUser.role);
-    renderHomePage(activeSessionUser.role);
     startSessionWatchdog();
     showActiveFrame("sec-glamtrack");
     
@@ -998,6 +1039,7 @@ function performSessionLogoutAction() {
     stopSessionWatchdog();
     activeSessionUser = null;
     window.location.reload();
+    // bg-glamtrack and sec-glamtrack visibility handled on reload via renderAuthorizedWorkspaceSession
 }
 
 // =========================================================================
@@ -1260,6 +1302,12 @@ async function renderGlamtrackPremium() {
     } catch(err) { await handleTelemetryAlert("GlamTrack Premium Customers", err); }
 }
 
+// --- Scroll to glamtrack list section on stat card click ---
+function scrollToGlamtrackSection(sectionId) {
+    const el = document.getElementById(sectionId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 // --- View More Modal ---
 function openGlamtrackModal(type) {
     let title = "", headHtml = "", rows = [];
@@ -1476,6 +1524,10 @@ async function processCommonPackADMFormSubmission(e) {
     const totalAmt  = parseFloat(document.getElementById("pack-total-amt").value) || 0;
     const activeFlag = document.getElementById("pack-active").checked;
 
+    // Point 17: price cannot exceed totalAmt
+    if (price > totalAmt)
+        return alert("Validation Error: Price Offered (₹" + price.toLocaleString("en-IN") + ") cannot exceed Total Price (₹" + totalAmt.toLocaleString("en-IN") + "). Please correct before saving.");
+
     const selectedSubServices = [];
     document.querySelectorAll(".chk-pack-subservice:checked").forEach(input => selectedSubServices.push(input.value));
     // Type2: at least one subservice required. Type3: zero is allowed (excluded items list can be empty).
@@ -1671,6 +1723,14 @@ async function processUserADMFormSubmission(e) {
 
         refreshAllAdministrativeTables();
         loadWorkspaceDropdownMappings();
+
+        // Re-apply current mode (CUSTOMER/MANAGER) so form resets to correct dynamic state
+        // This also refreshes "All Active Registered Profiles List" with the correct role filter
+        const _postSaveMode = document.getElementById("sec-adm-users")?.dataset?.userMode;
+        if (_postSaveMode) {
+            applyUserFormMode(_postSaveMode);
+            _refreshUserTableForMode(_postSaveMode);
+        }
     } catch(err) { await handleTelemetryAlert("User Identity Provisioning Endpoint", err); }
 }
 
@@ -1678,6 +1738,9 @@ async function processUserADMFormSubmission(e) {
 // Dynamic User Form Mode: "CUSTOMER" or "MANAGER" context
 // =========================================================================
 function applyUserFormMode(mode) {
+    // Set mode immediately so refreshAllAdministrativeTables can read it
+    document.getElementById("sec-adm-users").dataset.userMode = mode;
+
     // Reset form to blank state (except explicit dropdowns set below)
     const profileForm = document.getElementById("frm-adm-user-profile");
     if (profileForm) profileForm.reset();
@@ -1740,6 +1803,17 @@ function applyUserFormMode(mode) {
         if (distEl) distEl.style.display = "";
     }
 
+    // --- Email: mandatory for MANAGER/STAFF, optional for CUSTOMER ---
+    const emailEl    = document.getElementById("usr-email");
+    const emailLabel = document.getElementById("lbl-usr-email");
+    if (mode === "MANAGER") {
+        if (emailEl)    { emailEl.required = true; }
+        if (emailLabel) emailLabel.textContent = "Email Address";
+    } else {
+        if (emailEl)    { emailEl.required = false; }
+        if (emailLabel) emailLabel.textContent = "Email Address [Optional]";
+    }
+
     // --- Registration Fee: show for CUSTOMER only ---
     const regFeeWrapper = document.getElementById("usr-reg-fee-wrapper");
     if (regFeeWrapper) regFeeWrapper.style.display = mode === "CUSTOMER" ? "" : "none";
@@ -1749,9 +1823,6 @@ function applyUserFormMode(mode) {
 
     // --- Refresh the users table with role filter ---
     _refreshUserTableForMode(mode);
-
-    // Store current mode for reset button
-    document.getElementById("sec-adm-users").dataset.userMode = mode;
 }
 
 async function _repopulateUserSelectExisting(mode) {
@@ -2978,19 +3049,27 @@ async function refreshAllAdministrativeTables() {
         }
     }
 
+    // tbl-adm-users: apply role filter matching the current active form mode
     {
-        const usrQ = query(collection(db, "users"),
-            where("ownerUserNo", "==", ownerId));
-        const usrSnap = await getDocs(usrQ);
-        const usrTbody = document.getElementById("tbl-adm-users");
-        if (usrTbody) {
-            usrTbody.innerHTML = "";
-            usrSnap.forEach(d => {
-                const data = d.data();
-                const tr = document.createElement("tr");
-                tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
-                usrTbody.appendChild(tr);
-            });
+        const currentMode = document.getElementById("sec-adm-users")?.dataset?.userMode;
+        if (currentMode) {
+            // Mode is set — delegate entirely to _refreshUserTableForMode for correct role filter
+            await _refreshUserTableForMode(currentMode);
+        } else {
+            // No mode set — fallback: show all users (should not happen in normal flow)
+            const usrQ = query(collection(db, "users"),
+                where("ownerUserNo", "==", ownerId));
+            const usrSnap = await getDocs(usrQ);
+            const usrTbody = document.getElementById("tbl-adm-users");
+            if (usrTbody) {
+                usrTbody.innerHTML = "";
+                usrSnap.forEach(d => {
+                    const data = d.data();
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
+                    usrTbody.appendChild(tr);
+                });
+            }
         }
     }
 }
@@ -3078,18 +3157,33 @@ async function loadWorkspaceDropdownMappings() {
 
     const userProfileSelect = document.getElementById("usr-select-existing");
     if (userProfileSelect) {
-        const usersQuery = query(collection(db, "users"), where("ownerUserNo", "==", ownerId));
+        // Respect active user form mode: Customer Registration → CUSTOMER only;
+        // Staff Registration → MANAGER/STAFF only; no mode set → all users
+        const activeMode = document.getElementById("sec-adm-users")?.dataset?.userMode;
+        let usersQuery;
+        if (activeMode === "CUSTOMER") {
+            usersQuery = query(collection(db, "users"),
+                where("ownerUserNo", "==", ownerId),
+                where("role", "==", "CUSTOMER"));
+        } else if (activeMode === "MANAGER") {
+            usersQuery = query(collection(db, "users"),
+                where("ownerUserNo", "==", ownerId),
+                where("role", "in", ["MANAGER", "STAFF"]));
+        } else {
+            usersQuery = query(collection(db, "users"),
+                where("ownerUserNo", "==", ownerId));
+        }
         const usersSnap = await getDocs(usersQuery);
         userProfileSelect.innerHTML = `<option value="">-- Choose from Available List --</option>`;
         usersSnap.forEach(d => {
             const data = d.data();
             userProfileSelect.innerHTML += `<option value="${data.userNo}">${data.name} — ${data.role} (ID: ${data.userNo})</option>`;
         });
+        userProfileSelect._allOptions = Array.from(userProfileSelect.options);
     }
 
     await populateSelect("subServices", "sub-select-existing", "subServiceCode", "subServiceName");
     { const _s = document.getElementById("sub-select-existing"); if (_s) _s._allOptions = Array.from(_s.options); }
-    { const _u = document.getElementById("usr-select-existing"); if (_u) _u._allOptions = Array.from(_u.options); }
 }
 
 function setupMediaPreviewListener(inputId, imgId) {
