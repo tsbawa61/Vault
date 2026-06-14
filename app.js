@@ -7,7 +7,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { 
-    getFirestore, collection, query, where, getDocs, doc, setDoc, onSnapshot, writeBatch, updateDoc, deleteDoc
+    getFirestore, collection, query, where, getDocs, getDoc, doc, setDoc, onSnapshot, writeBatch, updateDoc, deleteDoc
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 // Import your provided modular configurations
@@ -37,6 +37,9 @@ let allotCurrentPackTotalAmount = 0;
 let allotPacksCache = new Map();
 let _utilizeOverrideConfirmed = false;   // tracks negative-balance override consent
 let _utilizeOverrideMeta      = null;    // holds override email payload until post-save
+let _oldVisitPrevCalcCost     = 0;       // prev calculatedValueCost for old-visit modification
+let _oldVisitPrevAddlAmt      = 0;       // prev addlAmtReceived for old-visit modification
+let _oldVisitLogDocRef        = null;    // Firestore doc ref of the log being modified
 let utilizePrevUnpaidBalance = 0;
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes Boundary
 
@@ -546,6 +549,7 @@ function initViewRouterLinks() {
         // Re-check "New Visit" radio (reset() clears radio group)
         const newVisitRadio = document.getElementById("utilize-visit-new");
         if (newVisitRadio) newVisitRadio.checked = true;
+        resetOldVisitUI();
         document.getElementById("container-utilize-subservices").innerHTML = "";
         utilizePrevUnpaidBalance = 0;
         const financialEl = document.getElementById("utilize-pack-financial");
@@ -563,8 +567,26 @@ function initViewRouterLinks() {
     });
     
     // Automated reactive lookups processing links
-    document.getElementById("utilize-customer-select")?.addEventListener("change", updateCustomerAllottedPacksDropdown);
-    document.getElementById("utilize-pack-select")?.addEventListener("change", renderUtilizeSubServicesCheckboxes);
+    document.getElementById("utilize-customer-select")?.addEventListener("change", () => {
+        resetOldVisitUI();
+        updateCustomerAllottedPacksDropdown();
+    });
+    document.getElementById("utilize-pack-select")?.addEventListener("change", () => {
+        resetOldVisitUI();
+        renderUtilizeSubServicesCheckboxes();
+    });
+
+    // Radio button: show/hide old-visit dropdown
+    document.getElementById("utilize-visit-new")?.addEventListener("change", () => resetOldVisitUI());
+    document.getElementById("utilize-visit-old")?.addEventListener("change", async () => {
+        await populateOldVisitDates();
+    });
+
+    // Old visit date selected → pre-fill form
+    document.getElementById("utilize-old-visit-date-select")?.addEventListener("change", () => prefillOldVisitData());
+
+    // Delete button for old visit
+    document.getElementById("btn-utilize-delete")?.addEventListener("click", () => deleteOldVisitRecord());
     document.getElementById("allot-pack-select")?.addEventListener("change", handleAllotPackSelectChange);
     document.getElementById("allot-customer-select")?.addEventListener("change", handleAllotCustomerSelectChange);
 
@@ -1291,12 +1313,16 @@ async function renderGlamtrackPremium() {
 
         if (statEl) statEl.textContent = _glamtrackFullPremium.length;
         const rows = _glamtrackFullPremium.slice(0, GLAMTRACK_PREVIEW_ROWS);
+        const isOwner = activeSessionUser?.role === "OWNER";
         tbody.innerHTML = rows.map(r => `
             <tr>
                 <td><strong>#${r.customerNo}</strong></td>
                 <td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td>
-                <td class="fw-bold text-success">₹${Number(r.totalSpend).toLocaleString("en-IN")}</td>
+                ${isOwner ? `<td class="fw-bold text-success">₹${Number(r.totalSpend).toLocaleString("en-IN")}</td>` : "<td>—</td>"}
             </tr>`).join("");
+        // Show/hide Total Spend column header based on role
+        const premiumThead = document.querySelector("#tbl-glamtrack-premium thead tr th:last-child");
+        if (premiumThead) premiumThead.style.display = isOwner ? "" : "none";
         if (viewMoreBtn) viewMoreBtn.classList.toggle("d-none", _glamtrackFullPremium.length <= GLAMTRACK_PREVIEW_ROWS);
 
     } catch(err) { await handleTelemetryAlert("GlamTrack Premium Customers", err); }
@@ -1321,8 +1347,9 @@ function openGlamtrackModal(type) {
         rows = _glamtrackFullUnengaged.map(r => `<tr><td><strong>#${r.customerNo}</strong></td><td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td><td>${r.lastVisit||"—"}</td></tr>`);
     } else if (type === "premium") {
         title = "Premium Customers (Last 1Y > ₹20k)";
-        headHtml = `<tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Total Spend (₹)</th></tr>`;
-        rows = _glamtrackFullPremium.map(r => `<tr><td><strong>#${r.customerNo}</strong></td><td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td><td class="fw-bold text-success">₹${Number(r.totalSpend).toLocaleString("en-IN")}</td></tr>`);
+        const isOwnerModal = activeSessionUser?.role === "OWNER";
+        headHtml = `<tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th>${isOwnerModal ? "<th>Total Spend (₹)</th>" : ""}</tr>`;
+        rows = _glamtrackFullPremium.map(r => `<tr><td><strong>#${r.customerNo}</strong></td><td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td>${isOwnerModal ? `<td class="fw-bold text-success">₹${Number(r.totalSpend).toLocaleString("en-IN")}</td>` : ""}</tr>`);
     }
     document.getElementById("glamtrackModalTitle").textContent = title;
     document.getElementById("glamtrackModalHead").innerHTML = headHtml;
@@ -1871,7 +1898,7 @@ async function _refreshUserTableForMode(mode) {
     usrSnap.forEach(d => {
         const data = d.data();
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
+        tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.phone || "—"}</td><td>${data.email || "—"}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
         usrTbody.appendChild(tr);
     });
 }
@@ -2755,8 +2782,240 @@ function updateUtilizeServicesTotal() {
     totalEl.textContent = `Selected services total: ₹${total.toLocaleString("en-IN")} (${checked.length} item${checked.length === 1 ? "" : "s"})`;
 }
 
+// =========================================================================
+// Old Visit Modification Helpers
+// =========================================================================
+
+function resetOldVisitUI() {
+    _oldVisitLogDocRef    = null;
+    _oldVisitPrevCalcCost = 0;
+    _oldVisitPrevAddlAmt  = 0;
+
+    const wrapper = document.getElementById("utilize-old-visit-wrapper");
+    if (wrapper) wrapper.style.display = "none";
+
+    const dateSelect = document.getElementById("utilize-old-visit-date-select");
+    if (dateSelect) { dateSelect.innerHTML = `<option value="">-- Select a Previous Visit Date --</option>`; }
+
+    // Show Save, hide Delete
+    const saveBtn = document.getElementById("btn-utilize-submit");
+    const delBtn  = document.getElementById("btn-utilize-delete");
+    if (saveBtn) saveBtn.classList.remove("d-none");
+    if (delBtn)  delBtn.classList.add("d-none");
+
+    // Re-enable all form fields
+    ["utilize-visit-date","utilize-addl-amt-received"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.removeAttribute("readonly");
+    });
+
+    // Clear checkboxes
+    document.querySelectorAll(".chk-utilize-subservice").forEach(cb => {
+        cb.disabled = false;
+        cb.checked  = false;
+    });
+}
+
+async function populateOldVisitDates() {
+    const custNo  = document.getElementById("utilize-customer-select").value;
+    const allotId = document.getElementById("utilize-pack-select").value;
+    const wrapper = document.getElementById("utilize-old-visit-wrapper");
+    const dateSelect = document.getElementById("utilize-old-visit-date-select");
+
+    if (!custNo || !allotId || !activeSessionUser) {
+        alert("Please select a Customer and a Package first before choosing Old Visit.");
+        document.getElementById("utilize-visit-new").checked = true;
+        return;
+    }
+
+    if (wrapper) wrapper.style.display = "block";
+
+    const ownerNo = activeSessionUser.role === "OWNER"
+        ? activeSessionUser.userNo : activeSessionUser.ownerUserNo;
+
+    try {
+        const logsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", ownerNo),
+            where("allotId",     "==", allotId),
+            where("customerNo",  "==", custNo));
+        const logsSnap = await getDocs(logsQ);
+
+        dateSelect.innerHTML = `<option value="">-- Select a Previous Visit Date --</option>`;
+        const logs = [];
+        logsSnap.forEach(d => logs.push({ id: d.id, ref: d.ref, ...d.data() }));
+        logs.sort((a, b) => (b.visitDate || "").localeCompare(a.visitDate || ""));
+
+        if (logs.length === 0) {
+            dateSelect.innerHTML = `<option value="">No previous visits found</option>`;
+            return;
+        }
+        logs.forEach(log => {
+            const opt = document.createElement("option");
+            opt.value = log.id;
+            opt.textContent = `${log.visitDate} — ${(log.itemsRendered || []).length} service(s), Addl Amt: ₹${log.addlAmtReceived || 0}`;
+            opt.dataset.logData = JSON.stringify(log);
+            dateSelect.appendChild(opt);
+        });
+    } catch(err) { await handleTelemetryAlert("Old Visit Date Population", err); }
+}
+
+async function prefillOldVisitData() {
+    const dateSelect = document.getElementById("utilize-old-visit-date-select");
+    const selectedOpt = dateSelect.options[dateSelect.selectedIndex];
+    if (!selectedOpt || !selectedOpt.dataset.logData) return;
+
+    let log;
+    try { log = JSON.parse(selectedOpt.dataset.logData); }
+    catch { return; }
+
+    _oldVisitLogDocRef    = log.ref || null;
+    _oldVisitPrevCalcCost = Number(log.calculatedValueCost || 0);
+    _oldVisitPrevAddlAmt  = Number(log.addlAmtReceived     || 0);
+
+    // Pre-fill visit date
+    const visitDateEl = document.getElementById("utilize-visit-date");
+    if (visitDateEl) visitDateEl.value = log.visitDate || "";
+
+    // Pre-fill addlAmtReceived
+    const addlEl = document.getElementById("utilize-addl-amt-received");
+    if (addlEl) addlEl.value = log.addlAmtReceived || 0;
+
+    // Pre-check services from itemsRendered
+    const prevItems = log.itemsRendered || [];
+    document.querySelectorAll(".chk-utilize-subservice").forEach(cb => {
+        cb.checked = prevItems.includes(cb.value);
+    });
+
+    // Show Delete button alongside Save
+    const delBtn = document.getElementById("btn-utilize-delete");
+    if (delBtn) delBtn.classList.remove("d-none");
+}
+
+async function deleteOldVisitRecord() {
+    if (!_oldVisitLogDocRef) return alert("Please select a previous visit date first.");
+
+    if (!confirm("⚠️ Delete this visit record? The package balance will be restored. This cannot be undone.")) return;
+
+    try {
+        const custNo  = document.getElementById("utilize-customer-select").value;
+        const allotId = document.getElementById("utilize-pack-select").value;
+
+        // Get the log data to reverse
+        const logSnap = await getDoc(_oldVisitLogDocRef);
+        if (!logSnap.exists()) return alert("Error: Visit record not found.");
+        const logData = logSnap.data();
+
+        // Restore balance in customerServicePacks
+        const packQ = query(collection(db, "customerServicePacks"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId",     "==", allotId));
+        const packSnap = await getDocs(packQ);
+        if (packSnap.empty) return alert("Error: Package record not found.");
+
+        const packRef  = packSnap.docs[0].ref;
+        const pData    = packSnap.docs[0].data();
+
+        const restoredBalance = Number(pData.remainingBalance) +
+            (pData.packType === "Type1"
+                ? Number(logData.unitsSubtracted || 0)
+                : Number(logData.calculatedValueCost || 0));
+
+        const restoredUnpaid = Math.max(0,
+            Number(pData.unpaidBalance || 0) - Number(logData.addlAmtReceived || 0));
+
+        await updateDoc(packRef, {
+            remainingBalance: restoredBalance,
+            unpaidBalance:    restoredUnpaid,
+            lastVisitDate:    null   // will be recalculated on next visit
+        });
+
+        // Delete the log document
+        await deleteDoc(_oldVisitLogDocRef);
+
+        alert("✅ Visit record deleted and package balance restored.");
+        resetOldVisitUI();
+        document.getElementById("utilize-visit-new").checked = true;
+        await renderVisitHistory(allotId, custNo);
+
+    } catch(err) { await handleTelemetryAlert("Old Visit Delete", err); }
+}
+
 async function processVisitDeductionFormSubmission(e) {
     e.preventDefault();
+
+    const isOldVisit = document.getElementById("utilize-visit-old")?.checked;
+
+    // === OLD VISIT: update existing log ===
+    if (isOldVisit) {
+        if (!_oldVisitLogDocRef) return alert("Please select a previous visit date to modify.");
+
+        const custNo  = document.getElementById("utilize-customer-select").value;
+        const allotId = document.getElementById("utilize-pack-select").value;
+        const visitDate = document.getElementById("utilize-visit-date").value;
+        const newAddlAmt = parseFloat(document.getElementById("utilize-addl-amt-received")?.value) || 0;
+
+        const checkedInputs = document.querySelectorAll(".chk-utilize-subservice:checked");
+        let newCalcCost = 0;
+        const newItemCodes = [];
+        checkedInputs.forEach(input => {
+            newCalcCost += Number(input.getAttribute("data-rate"));
+            newItemCodes.push(input.value);
+        });
+
+        if (checkedInputs.length === 0 && newAddlAmt === 0)
+            return alert("Validation: Please select at least one service or enter an additional amount.");
+
+        try {
+            // Get pack for packType
+            const packQ = query(collection(db, "customerServicePacks"),
+                where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                where("allotId",     "==", allotId));
+            const packSnap = await getDocs(packQ);
+            if (packSnap.empty) return alert("Error: Package record not found.");
+            const packRef = packSnap.docs[0].ref;
+            const pData   = packSnap.docs[0].data();
+
+            // Reverse old deduction, apply new deduction
+            const oldDeduction = pData.packType === "Type1"
+                ? Number(document.getElementById("utilize-old-visit-date-select")
+                    .options[document.getElementById("utilize-old-visit-date-select").selectedIndex]
+                    .dataset.logData ? JSON.parse(document.getElementById("utilize-old-visit-date-select")
+                    .options[document.getElementById("utilize-old-visit-date-select").selectedIndex]
+                    .dataset.logData).unitsSubtracted || 0 : 0)
+                : _oldVisitPrevCalcCost;
+            const newDeduction = pData.packType === "Type1" ? checkedInputs.length : newCalcCost;
+
+            const balanceDiff  = oldDeduction - newDeduction; // positive = balance restored
+            const addlAmtDiff  = newAddlAmt - _oldVisitPrevAddlAmt;
+            const newBalance   = Number(pData.remainingBalance) + balanceDiff;
+            const newUnpaid    = Math.max(0, Number(pData.unpaidBalance || 0) - addlAmtDiff);
+
+            await updateDoc(packRef, { remainingBalance: newBalance, unpaidBalance: newUnpaid });
+
+            // Update the log document
+            await updateDoc(_oldVisitLogDocRef, {
+                visitDate,
+                itemsRendered: newItemCodes,
+                unitsSubtracted: checkedInputs.length,
+                calculatedValueCost: newCalcCost,
+                addlAmtReceived: newAddlAmt,
+                modifiedAt: new Date().toISOString()
+            });
+
+            alert(`✅ Visit record updated. New Package Balance: ${newBalance}`);
+            resetOldVisitUI();
+            document.getElementById("utilize-visit-new").checked = true;
+            await renderVisitHistory(allotId, custNo);
+            document.getElementById("frm-utilize-service-visit").reset();
+            const _uSrch = document.getElementById("utilize-customer-search");
+            if (_uSrch) { _uSrch.value = ""; _uSrch.dispatchEvent(new Event("input")); }
+            document.getElementById("container-utilize-subservices").innerHTML = "";
+
+        } catch(err) { await handleTelemetryAlert("Old Visit Modification", err); }
+        return;
+    }
+
+    // === NEW VISIT (original logic below, unchanged) ===
     const custNo = document.getElementById("utilize-customer-select").value;
     const allotId = document.getElementById("utilize-pack-select").value;
     const visitDate = document.getElementById("utilize-visit-date").value;
@@ -2974,18 +3233,48 @@ async function refreshAllAdministrativeTables() {
     }
 
     {
+        // Fetch subServices grouped by serviceCode, show serviceName from services as heading
         const ssQ = query(collection(db, "subServices"),
             where("ownerUserNo", "==", ownerId),
             where("active", "==", true));
         const ssSnap = await getDocs(ssQ);
+
+        // Also fetch services for serviceCode→serviceName lookup
+        const srvQ = query(collection(db, "services"), where("ownerUserNo", "==", ownerId));
+        const srvSnap = await getDocs(srvQ);
+        const srvNameMap = new Map();
+        srvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
+
+        // Group subServices by serviceCode
+        const grouped = new Map();
+        ssSnap.forEach(d => {
+            const data = d.data();
+            if (!grouped.has(data.serviceCode)) grouped.set(data.serviceCode, []);
+            grouped.get(data.serviceCode).push(data);
+        });
+
         const ssTbody = document.getElementById("tbl-adm-subservices");
         if (ssTbody) {
             ssTbody.innerHTML = "";
-            ssSnap.forEach(d => {
-                const data = d.data();
-                const tr = document.createElement("tr");
-                tr.innerHTML = `<td>${data.subServiceName}</td><td><strong>₹${data.rate}</strong></td>`;
-                ssTbody.appendChild(tr);
+            grouped.forEach((items, serviceCode) => {
+                const srvName = srvNameMap.get(serviceCode) || serviceCode;
+                // Group heading row spanning 4 cols (2 cols × 2 sub-cols each)
+                const headTr = document.createElement("tr");
+                headTr.innerHTML = `<td colspan="4" class="fw-bold text-uppercase bg-light small py-1 px-2">${srvName}</td>`;
+                ssTbody.appendChild(headTr);
+
+                // Render items in pairs (2 per row)
+                for (let i = 0; i < items.length; i += 2) {
+                    const tr = document.createElement("tr");
+                    const left  = items[i];
+                    const right = items[i + 1];
+                    const leftCell  = `<td class="ps-3 small">${left.subServiceName}</td><td class="text-end small pe-3"><strong>₹${left.rate}</strong></td>`;
+                    const rightCell = right
+                        ? `<td class="ps-3 small">${right.subServiceName}</td><td class="text-end small pe-3"><strong>₹${right.rate}</strong></td>`
+                        : `<td></td><td></td>`;
+                    tr.innerHTML = leftCell + rightCell;
+                    ssTbody.appendChild(tr);
+                }
             });
         }
     }
@@ -3066,7 +3355,7 @@ async function refreshAllAdministrativeTables() {
                 usrSnap.forEach(d => {
                     const data = d.data();
                     const tr = document.createElement("tr");
-                    tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.email}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
+                    tr.innerHTML = `<td>#${data.userNo}</td><td><span class="badge bg-secondary text-uppercase">${data.role}</span></td><td><strong>${data.name}</strong></td><td>${data.phone || "—"}</td><td>${data.email || "—"}</td><td><span class="badge ${data.active?'bg-success':'bg-secondary'}">${data.active?'Active Card':'Archived'}</span></td><td>-</td>`;
                     usrTbody.appendChild(tr);
                 });
             }
@@ -3149,10 +3438,21 @@ async function loadWorkspaceDropdownMappings() {
         const _acEl = document.getElementById("allot-customer-select");
         if (_acEl) _acEl._allOptions = Array.from(_acEl.options);
     }
-    await populateSelect("users", "utilize-customer-select", "userNo", "name", "CUSTOMER");
+    // utilize-customer-select: value=userNo, display=name + phone (not userNo)
     {
-        const _ucEl = document.getElementById("utilize-customer-select");
-        if (_ucEl) _ucEl._allOptions = Array.from(_ucEl.options);
+        const custQ = query(collection(db, "users"),
+            where("ownerUserNo", "==", ownerId),
+            where("role", "==", "CUSTOMER"));
+        const custSnap = await getDocs(custQ);
+        const ucEl = document.getElementById("utilize-customer-select");
+        if (ucEl) {
+            ucEl.innerHTML = `<option value="">-- Choose from Available List --</option>`;
+            custSnap.forEach(d => {
+                const data = d.data();
+                ucEl.innerHTML += `<option value="${data.userNo}">${data.name} (Ph: ${data.phone || "—"})</option>`;
+            });
+            ucEl._allOptions = Array.from(ucEl.options);
+        }
     }
 
     const userProfileSelect = document.getElementById("usr-select-existing");
