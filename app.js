@@ -416,7 +416,10 @@ function initViewRouterLinks() {
     document.getElementById("nav-logout").addEventListener("click", performSessionLogoutAction);
 
     // Customers > Customer Visit
-    document.getElementById("nav-customer-visit")?.addEventListener("click", () => showActiveFrame("sec-visit"));
+    document.getElementById("nav-customer-visit")?.addEventListener("click", () => {
+        showActiveFrame("sec-visit");
+        setTimeout(() => document.getElementById("utilize-customer-select")?.focus(), 80);
+    });
 
     // Customers > Customer Registration
     document.getElementById("nav-customer-reg")?.addEventListener("click", () => {
@@ -570,10 +573,12 @@ function initViewRouterLinks() {
     document.getElementById("utilize-customer-select")?.addEventListener("change", () => {
         resetOldVisitUI();
         updateCustomerAllottedPacksDropdown();
+        setTimeout(() => document.getElementById("utilize-pack-select")?.focus(), 80);
     });
     document.getElementById("utilize-pack-select")?.addEventListener("change", () => {
         resetOldVisitUI();
         renderUtilizeSubServicesCheckboxes();
+        setTimeout(() => document.getElementById("container-utilize-subservices")?.focus(), 80);
     });
 
     // Radio button: show/hide old-visit dropdown
@@ -1965,11 +1970,7 @@ function resetAllotExistingPackUI() {
     _allotExistingPacks = [];
     _allotExistingIdx = 0;
 
-    // Re-enable fields
-    ["allot-pack-select","allot-sold-price","allot-amount-received","allot-start-date"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.removeAttribute("readonly");
-    });
+    // Re-enable pack-select
     const packSel = document.getElementById("allot-pack-select");
     if (packSel) packSel.removeAttribute("disabled");
 
@@ -2140,11 +2141,7 @@ function showAllotExistingPackAtIndex(idx) {
     const p = _allotExistingPacks[idx];
     if (!p) return;
 
-    // Disable all fields except expiry date
-    ["allot-sold-price","allot-amount-received","allot-start-date"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.setAttribute("readonly", "true");
-    });
+    // Only pack-select is disabled (cannot change package); all price/date fields remain editable
     const packSel = document.getElementById("allot-pack-select");
     if (packSel) packSel.setAttribute("disabled", "true");
 
@@ -2260,25 +2257,53 @@ function navigateAllotExistingPack(direction) {
 async function handleAllotModifyClick() {
     const p = _allotExistingPacks[_allotExistingIdx];
     if (!p) return;
-    const newExpiry = document.getElementById("allot-expiry-date").value;
-    if (newExpiry && p.startDate && newExpiry < p.startDate) {
+
+    const newExpiry    = document.getElementById("allot-expiry-date").value;
+    const newSoldPrice = parseFloat(document.getElementById("allot-sold-price").value);
+    const newAmtRcvd   = parseFloat(document.getElementById("allot-amount-received").value) || 0;
+    const newStartDate = document.getElementById("allot-start-date").value;
+
+    // Validation
+    if (isNaN(newSoldPrice) || newSoldPrice <= 0)
+        return alert("Validation Error: Selling Price must be a positive number.");
+    if (newAmtRcvd < 0)
+        return alert("Validation Error: Amount Received cannot be negative.");
+    if (!newStartDate)
+        return alert("Validation Error: Activation Date is required.");
+    if (newExpiry && newStartDate && newExpiry < newStartDate)
         return alert("Validation Error: Expiration Date cannot be before the Activation Date.");
-    }
+
     try {
         const q = query(
             collection(db, "customerServicePacks"),
             where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
-            where("allotId", "==", p.allotId),
-            where("customerNo", "==", p.customerNo)
+            where("allotId",     "==", p.allotId),
+            where("customerNo",  "==", p.customerNo)
         );
         const snap = await getDocs(q);
         if (snap.empty) return alert("Error: Could not locate the package record to update.");
-        await updateDoc(snap.docs[0].ref, { expiryDate: newExpiry || null });
-        alert("Success: Expiry date updated successfully.");
-        // Refresh the current pack's local data
-        _allotExistingPacks[_allotExistingIdx] = { ...p, expiryDate: newExpiry || null };
+
+        const updatePayload = {
+            expiryDate:       newExpiry    || null,
+            soldPrice:        newSoldPrice,
+            amountReceived:   newAmtRcvd,
+            startDate:        newStartDate,
+            unpaidBalance:    Math.max(0, newSoldPrice - newAmtRcvd)
+        };
+        await updateDoc(snap.docs[0].ref, updatePayload);
+        alert("✅ Package record updated successfully.");
+
+        // Refresh local pack data
+        _allotExistingPacks[_allotExistingIdx] = {
+            ...p,
+            expiryDate:     newExpiry || null,
+            soldPrice:      newSoldPrice,
+            amountReceived: newAmtRcvd,
+            startDate:      newStartDate,
+            unpaidBalance:  Math.max(0, newSoldPrice - newAmtRcvd)
+        };
     } catch (err) {
-        await handleTelemetryAlert("Allot Modify Expiry Update", err);
+        await handleTelemetryAlert("Allot Modify Update", err);
     }
 }
 
@@ -2932,6 +2957,18 @@ async function deleteOldVisitRecord() {
         // Delete the log document
         await deleteDoc(_oldVisitLogDocRef);
 
+        // Recalculate lastVisitDate from remaining logs
+        const remainingLogsQ = query(collection(db, "serviceUtilizationLogs"),
+            where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+            where("allotId",     "==", allotId));
+        const remainingLogsSnap = await getDocs(remainingLogsQ);
+        let newLastVisitDate = null;
+        remainingLogsSnap.forEach(d => {
+            const vd = d.data().visitDate || null;
+            if (vd && (!newLastVisitDate || vd > newLastVisitDate)) newLastVisitDate = vd;
+        });
+        await updateDoc(packRef, { lastVisitDate: newLastVisitDate });
+
         alert("✅ Visit record deleted and package balance restored.");
         resetOldVisitUI();
         document.getElementById("utilize-visit-new").checked = true;
@@ -2990,7 +3027,7 @@ async function processVisitDeductionFormSubmission(e) {
             const newBalance   = Number(pData.remainingBalance) + balanceDiff;
             const newUnpaid    = Math.max(0, Number(pData.unpaidBalance || 0) - addlAmtDiff);
 
-            await updateDoc(packRef, { remainingBalance: newBalance, unpaidBalance: newUnpaid });
+            await updateDoc(packRef, { remainingBalance: newBalance, unpaidBalance: newUnpaid, lastVisitDate: visitDate });
 
             // Update the log document
             await updateDoc(_oldVisitLogDocRef, {
@@ -3107,7 +3144,7 @@ async function processVisitDeductionFormSubmission(e) {
 
         const nowExhausted = updatedBalance <= 0;
         // a: Do NOT update amountReceived in customerServicePacks — it stays as initially recorded
-        const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance };
+        const exhaustionUpdate = { remainingBalance: updatedBalance, unpaidBalance: newUnpaidBalance, lastVisitDate: visitDate };
         if (nowExhausted) exhaustionUpdate.expiryDate = visitDate;
         await updateDoc(docRef, exhaustionUpdate);
         if (nowExhausted)
