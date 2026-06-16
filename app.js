@@ -1709,6 +1709,15 @@ async function processUserADMFormSubmission(e) {
                 let maxNo = 0;
                 snap.forEach(d => { const n = parseInt(d.data().userNo, 10); if (!isNaN(n) && n > maxNo) maxNo = n; });
                 targetUserNo = String(maxNo + 1).padStart(3, "0");
+            } else if (role === "STAFF") {
+                // 3-digit sequential, scoped to this owner
+                const q = query(collection(db, "users"),
+                    where("ownerUserNo", "==", activeSessionUser.ownerUserNo),
+                    where("role", "==", "STAFF"));
+                const snap = await getDocs(q);
+                let maxNo = 0;
+                snap.forEach(d => { const n = parseInt(d.data().userNo, 10); if (!isNaN(n) && n > maxNo) maxNo = n; });
+                targetUserNo = String(maxNo + 1).padStart(3, "0");
             } else if (role === "OWNER") {
                 // 3-digit sequential across ALL owners — query SUPER_USER scope (ownerUserNo='000')
                 const q = query(collection(db, "users"),
@@ -1729,6 +1738,9 @@ async function processUserADMFormSubmission(e) {
         } else if (role === "MANAGER") {
             recordOwnerUserNo = activeSessionUser.ownerUserNo;
             docId = `${recordOwnerUserNo}-MGR-${targetUserNo}`;
+        } else if (role === "STAFF") {
+            recordOwnerUserNo = activeSessionUser.ownerUserNo;
+            docId = `${recordOwnerUserNo}-STF-${targetUserNo}`;
         } else if (role === "OWNER") {
             recordOwnerUserNo = targetUserNo;   // owner's own userNo becomes their tenant key
             docId = `${targetUserNo}-OWNER`;
@@ -1802,12 +1814,16 @@ function applyUserFormMode(mode) {
             const custOpt = roleSelect.querySelector("option[value='CUSTOMER']");
             if (custOpt) { custOpt.hidden = false; }
             roleSelect.value = "CUSTOMER";
+            roleSelect.disabled = true;
         } else {
-            const mgrOpt = roleSelect.querySelector("option[value='MANAGER']");
-            if (mgrOpt) { mgrOpt.hidden = false; }
+            // MANAGER mode: show MANAGER and STAFF, let user choose, default MANAGER
+            ["MANAGER","STAFF"].forEach(v => {
+                const opt = roleSelect.querySelector(`option[value='${v}']`);
+                if (opt) opt.hidden = false;
+            });
             roleSelect.value = "MANAGER";
+            roleSelect.disabled = false;  // user can choose MANAGER or STAFF
         }
-        roleSelect.disabled = true;
     }
 
     // --- Password fields: hide for CUSTOMER, show & relabel for MANAGER ---
@@ -3277,10 +3293,15 @@ async function refreshAllAdministrativeTables() {
         const ssSnap = await getDocs(ssQ);
 
         // Also fetch services for serviceCode→serviceName lookup
-        const srvQ = query(collection(db, "services"), where("ownerUserNo", "==", ownerId));
-        const srvSnap = await getDocs(srvQ);
+        // For OWNER role, ownerUserNo on services may equal userNo, so query both
         const srvNameMap = new Map();
-        srvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
+        const srvOwnerIds = new Set([ownerId]);
+        if (activeSessionUser.role === "OWNER") srvOwnerIds.add(activeSessionUser.userNo);
+        for (const oId of srvOwnerIds) {
+            const srvQ = query(collection(db, "services"), where("ownerUserNo", "==", oId));
+            const srvSnap = await getDocs(srvQ);
+            srvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
+        }
 
         // Group subServices by serviceCode
         const grouped = new Map();

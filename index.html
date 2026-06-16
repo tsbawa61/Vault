@@ -151,9 +151,7 @@
         </div>
     </nav>
 
-    <div class="container p-4 rounded shadow-sm" style="max-width: 900px;">
-        
-        <section id="sec-home" class="text-center py-2 position-relative">
+    <section id="sec-home" class="text-center py-2 position-relative">
             <h1 class="display-5 fw-bold text-dark">Welcome to GlamTrack</h1>
             <p class="lead text-muted">Manage your salon appointments, customer packages, and service balances easily.</p>
             <div id="home-gallery" style="display:none;" class="mt-4 px-2">
@@ -164,6 +162,8 @@
                 </div>
             </div>
         </section>
+
+    <div class="container p-4 rounded shadow-sm" style="max-width: 900px;">
 
         <section id="sec-login" class="view-section">
             <h3 class="mb-3 fw-bold">Sign In to Your Account</h3>
@@ -294,6 +294,7 @@
         </section>
 
         <section id="sec-visit" class="view-section">
+            <h3 class="mb-4 fw-bold">Customer Visit</h3>
             <div class="card mb-4 border-primary">
                 <div class="card-header bg-primary text-white fw-bold">Customer's New Visit For Availing Package</div>
                 <div class="card-body">
@@ -389,6 +390,7 @@
         <button class="d-none" id="btn-trigger-autopopulate" disabled></button>
 
         <section id="sec-allot" class="view-section">
+            <h3 class="mb-4 fw-bold">Package Purchase</h3>
             <div class="card">
                 <div class="card-header bg-dark text-white fw-bold">Sell Package to a Customer</div>
                 <div class="card-body">
@@ -461,7 +463,6 @@
                         </div>
                     </form>
                 </div>
-            </div>
         </section>
 
         <section id="sec-adm-catalog" class="view-section">
@@ -608,7 +609,6 @@
         </section>
 
         <section id="sec-adm-packs" class="view-section">
-            <h3 style="display:none; margin:0; padding:0;">Create Pre-Paid Service Packages</h3>
             <div class="card mb-4">
                 <div class="card-header bg-dark text-white fw-bold">Define New Multi-Service Package Offer</div>
                 <div class="card-body">
@@ -682,7 +682,6 @@
         </section>
 
         <section id="sec-adm-users" class="view-section">
-            <h3 style="display:none; margin:0; padding:0;">Customer & Team Management</h3>
 
             <div class="card mb-4">
                 <div class="card-header bg-success text-white fw-bold">Add New Customer or Staff User Profile</div>
@@ -705,7 +704,7 @@
                                 <option value="OWNER" hidden>OWNER</option>
                                 <option value="CUSTOMER">CUSTOMER</option>
                                 <option value="MANAGER">MANAGER</option>
-                                <option value="STAFF" hidden> STAFF MEMBER</option>
+                                <option value="STAFF">STAFF</option>
                             </select>
                         </div>
                         <div class="mb-3">
