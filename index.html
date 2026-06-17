@@ -173,7 +173,7 @@
                 <select class="form-select" id="txt-login-role">
                     <option value="OWNER" selected>Salon Owner</option>
                     <option value="MANAGER">Manager</option>
-                    <option value="STAFF">Salon Staff / Stylist</option>
+                    <option value="STAFF" hidden>Salon Staff / Stylist</option>
                     <option value="SUPER_USER">System Administrator</option>
                 </select>
             </div>
@@ -754,11 +754,11 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">App Sign-In Password [Optional For Customer]</label>
-                                <input type="password" class="form-control" id="usr-password" placeholder="Create Login Password">
+                                <input type="password" class="form-control" id="usr-password" placeholder="Create Login Password (Mandatory for Manager)">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Confirm Password [Optional For Customer]</label>
-                                <input type="password" class="form-control" id="usr-confirm-password" placeholder="Re-enter Password">
+                                <input type="password" class="form-control" id="usr-confirm-password" placeholder="Re-enter Password (Mandatory for Manager)">
                                 <div id="usr-pwd-mismatch-msg" class="text-danger small mt-1" style="display:none;">⚠️ Passwords do not match.</div>
                             </div>
                         </div>

@@ -511,6 +511,11 @@ function initViewRouterLinks() {
     });
 
     document.getElementById("frm-adm-user-profile").addEventListener("submit", processUserADMFormSubmission);
+    document.getElementById("usr-role")?.addEventListener("change", (e) => {
+        // Only relevant in MANAGER/STAFF (Staff Registration) mode — CUSTOMER mode hides the row entirely
+        const currentMode = document.getElementById("sec-adm-users")?.dataset?.userMode;
+        if (currentMode === "MANAGER") _updatePasswordRequirementForRole(e.target.value);
+    });
     document.getElementById("btn-reset-userprofile")?.addEventListener("click", () => {
         document.getElementById("frm-adm-user-profile").reset();
         document.getElementById("usr-active").checked = true;
@@ -1783,6 +1788,28 @@ async function processUserADMFormSubmission(e) {
 // =========================================================================
 // Dynamic User Form Mode: "CUSTOMER" or "MANAGER" context
 // =========================================================================
+// Updates usr-password / usr-confirm-password placeholder text and required state
+// based on the currently selected usr-role value. Password is mandatory for MANAGER,
+// optional for STAFF (and for CUSTOMER, handled separately by hiding the row entirely).
+function _updatePasswordRequirementForRole(role) {
+    const pwdField     = document.getElementById("usr-password");
+    const confPwdField = document.getElementById("usr-confirm-password");
+    if (!pwdField || !confPwdField) return;
+
+    if (role === "STAFF") {
+        pwdField.placeholder     = "Create Login Password (Optional for Staff)";
+        confPwdField.placeholder = "Re-enter Password (Optional for Staff)";
+        pwdField.required     = false;
+        confPwdField.required = false;
+    } else {
+        // MANAGER (and default/fallback)
+        pwdField.placeholder     = "Create Login Password (Mandatory for Manager)";
+        confPwdField.placeholder = "Re-enter Password (Mandatory for Manager)";
+        pwdField.required     = true;
+        confPwdField.required = true;
+    }
+}
+
 function applyUserFormMode(mode) {
     // Set mode immediately so refreshAllAdministrativeTables can read it
     document.getElementById("sec-adm-users").dataset.userMode = mode;
@@ -1828,7 +1855,7 @@ function applyUserFormMode(mode) {
         }
     }
 
-    // --- Password fields: hide for CUSTOMER, show & relabel for MANAGER ---
+    // --- Password fields: hide for CUSTOMER, show & relabel for MANAGER/STAFF ---
     const pwdRow = document.getElementById("usr-password")?.closest(".row");
     const pwdField    = document.getElementById("usr-password");
     const confPwdField= document.getElementById("usr-confirm-password");
@@ -1840,6 +1867,8 @@ function applyUserFormMode(mode) {
         if (pwdRow) pwdRow.style.display = "";
         if (pwdLabel)    pwdLabel.textContent    = "Sign-In Password";
         if (confPwdLabel) confPwdLabel.textContent = "Confirm Password";
+        // Apply mandatory/optional state based on currently selected role (default MANAGER)
+        _updatePasswordRequirementForRole(roleSelect ? roleSelect.value : "MANAGER");
     }
 
     // --- Age and Distance: hide for MANAGER/STAFF, show for CUSTOMER ---
@@ -3142,15 +3171,10 @@ async function processVisitDeductionFormSubmission(e) {
 
             await updateDoc(packRef, { remainingBalance: newBalance, unpaidBalance: newUnpaid, lastVisitDate: visitDate });
 
-            // Update the log document
+            // Update the log document — ONLY itemsRendered and serviceProviders are replaced
             await updateDoc(_oldVisitLogDocRef, {
-                visitDate,
                 itemsRendered: newItemCodes,
-                serviceProviders: _collectServiceProviders(checkedInputs),
-                unitsSubtracted: checkedInputs.length,
-                calculatedValueCost: newCalcCost,
-                addlAmtReceived: newAddlAmt,
-                modifiedAt: new Date().toISOString()
+                serviceProviders: _collectServiceProviders(checkedInputs)
             });
 
             alert(`✅ Visit record updated. New Package Balance: ${newBalance}`);
@@ -3391,9 +3415,15 @@ async function refreshAllAdministrativeTables() {
             where("active", "==", true));
         const ssSnap = await getDocs(ssQ);
 
-        // Also fetch services for serviceCode→serviceName lookup
-        // For OWNER role, ownerUserNo on services may equal userNo, so query both
+        // Also fetch services for serviceCode→serviceName lookup.
+        // sub-parent-srv dropdown (used when creating subServices) is populated from
+        // services where createdBy === "SUPER_USER" (global service list), NOT filtered
+        // by ownerUserNo. So the lookup map must include those records too, in addition
+        // to any owner-specific services, or the serviceName lookup will always fail.
         const srvNameMap = new Map();
+
+        // 1) Owner-specific services (and OWNER's own userNo, since ownerUserNo on
+        //    services may equal userNo for OWNER role)
         const srvOwnerIds = new Set([ownerId]);
         if (activeSessionUser.role === "OWNER") srvOwnerIds.add(activeSessionUser.userNo);
         for (const oId of srvOwnerIds) {
@@ -3401,6 +3431,11 @@ async function refreshAllAdministrativeTables() {
             const srvSnap = await getDocs(srvQ);
             srvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
         }
+
+        // 2) Global SUPER_USER-created services (matches sub-parent-srv dropdown source)
+        const superSrvQ = query(collection(db, "services"), where("createdBy", "==", "SUPER_USER"));
+        const superSrvSnap = await getDocs(superSrvQ);
+        superSrvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
 
         // Group subServices by serviceCode
         const grouped = new Map();
