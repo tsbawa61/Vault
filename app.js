@@ -40,6 +40,7 @@ let _utilizeOverrideMeta      = null;    // holds override email payload until p
 let _oldVisitPrevCalcCost     = 0;       // prev calculatedValueCost for old-visit modification
 let _oldVisitPrevAddlAmt      = 0;       // prev addlAmtReceived for old-visit modification
 let _oldVisitLogDocRef        = null;    // Firestore doc ref of the log being modified
+let _utilizeStaffOptions      = null;    // cached [{value, label, userNo, role}] for staff dropdowns
 let utilizePrevUnpaidBalance = 0;
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes Boundary
 
@@ -1064,6 +1065,7 @@ function renderAuthorizedWorkspaceSession() {
 function performSessionLogoutAction() {
     if (realtimePacksUnsubscribe) realtimePacksUnsubscribe();
     stopSessionWatchdog();
+    _utilizeStaffOptions = null; // clear staff cache on logout
     activeSessionUser = null;
     window.location.reload();
     // bg-glamtrack and sec-glamtrack visibility handled on reload via renderAuthorizedWorkspaceSession
@@ -2576,6 +2578,65 @@ async function updateCustomerAllottedPacksDropdown() {
     } catch (err) { await handleTelemetryAlert("Dynamic Dropdown Sync Loop", err); }
 }
 
+// Point (a): decide ownerUserNo to use in where clauses for utilize form
+function _getUtilizeOwnerMatch() {
+    if (!activeSessionUser) return null;
+    return activeSessionUser.role === "OWNER"
+        ? activeSessionUser.userNo
+        : activeSessionUser.ownerUserNo;
+}
+
+// Load staff/manager/owner options for service-provider dropdown, sorted STAFF first then others by name
+async function _loadStaffOptions() {
+    if (_utilizeStaffOptions !== null) return _utilizeStaffOptions; // use cache
+    const ownerMatch = _getUtilizeOwnerMatch();
+    if (!ownerMatch) return [];
+    try {
+        const q = query(collection(db, "users"),
+            where("ownerUserNo", "==", ownerMatch),
+            where("role", "in", ["OWNER", "MANAGER", "STAFF"]));
+        const snap = await getDocs(q);
+        const staff = [], others = [];
+        snap.forEach(d => {
+            const u = d.data();
+            const entry = { userNo: u.userNo, role: u.role, name: u.name };
+            if (u.role === "STAFF") staff.push(entry);
+            else others.push(entry);
+        });
+        staff.sort((a, b) => a.name.localeCompare(b.name));
+        others.sort((a, b) => a.name.localeCompare(b.name));
+        _utilizeStaffOptions = [...staff, ...others];
+    } catch { _utilizeStaffOptions = []; }
+    return _utilizeStaffOptions;
+}
+
+// Build the staff dropdown HTML string for a given subServiceCode
+function _buildStaffDropdownHtml(subServiceCode) {
+    const opts = (_utilizeStaffOptions || []).map(u =>
+        `<option value="${u.userNo}" data-role="${u.role}">${u.name} (${u.role})</option>`
+    ).join("");
+    return `<select class="form-select form-select-sm ms-2 staff-provider-select" style="width:auto;min-width:150px;display:inline-block;" data-for-service="${subServiceCode}">
+                <option value="">-- Assign Staff --</option>${opts}
+            </select>`;
+}
+
+// Attach checkbox → show/hide staff dropdown handler
+function _attachStaffDropdownHandler(chk) {
+    chk.addEventListener("change", () => {
+        const wrapper = chk.closest(".form-check");
+        if (!wrapper) return;
+        const existingSel = wrapper.querySelector(".staff-provider-select");
+        if (chk.checked) {
+            if (!existingSel) {
+                wrapper.insertAdjacentHTML("beforeend", _buildStaffDropdownHtml(chk.value));
+            }
+        } else {
+            if (existingSel) existingSel.remove();
+        }
+        updateUtilizeServicesTotal();
+    });
+}
+
 async function renderUtilizeSubServicesCheckboxes() {
     const allotId = document.getElementById("utilize-pack-select").value;
     const container = document.getElementById("container-utilize-subservices");
@@ -2592,6 +2653,9 @@ async function renderUtilizeSubServicesCheckboxes() {
     if (addlAmtEl) addlAmtEl.value = "0";
     utilizePrevUnpaidBalance = 0;
     if (!allotId) return;
+
+    // Pre-load staff options (cached after first load)
+    await _loadStaffOptions();
 
     try {
         const q = query(collection(db, "customerServicePacks"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("allotId", "==", allotId));
@@ -2693,7 +2757,7 @@ async function renderUtilizeSubServicesCheckboxes() {
             // Type1 / Type2: original behaviour — show only items in subServicesArray
             if (!pData.subServicesArray || pData.subServicesArray.length === 0) {
                 container.innerHTML = `<span class="text-muted small">This package tier allows choice across all salon items without any explicit service restrictions rules.</span>`;
-                container.querySelectorAll(".chk-utilize-subservice").forEach(chk => chk.addEventListener("change", updateUtilizeServicesTotal));
+                container.querySelectorAll(".chk-utilize-subservice").forEach(chk => _attachStaffDropdownHandler(chk));
                 if (totalEl) totalEl.style.display = "block";
                 return;
             }
@@ -2727,7 +2791,7 @@ async function renderUtilizeSubServicesCheckboxes() {
         }
 
         container.querySelectorAll(".chk-utilize-subservice").forEach(chk => {
-            chk.addEventListener("change", updateUtilizeServicesTotal);
+            _attachStaffDropdownHandler(chk);
         });
         if (totalEl) totalEl.style.display = "block";
 
@@ -2921,10 +2985,24 @@ async function prefillOldVisitData() {
     const addlEl = document.getElementById("utilize-addl-amt-received");
     if (addlEl) addlEl.value = log.addlAmtReceived || 0;
 
-    // Pre-check services from itemsRendered
-    const prevItems = log.itemsRendered || [];
+    // Pre-check services from itemsRendered and restore staff dropdowns
+    const prevItems    = log.itemsRendered    || [];
+    const prevProviders = log.serviceProviders || []; // array of {userNo, role}
     document.querySelectorAll(".chk-utilize-subservice").forEach(cb => {
         cb.checked = prevItems.includes(cb.value);
+        if (cb.checked) {
+            const wrapper = cb.closest(".form-check");
+            if (wrapper && !wrapper.querySelector(".staff-provider-select")) {
+                wrapper.insertAdjacentHTML("beforeend", _buildStaffDropdownHtml(cb.value));
+            }
+            // Restore previous provider selection
+            const idx = prevItems.indexOf(cb.value);
+            const provider = idx >= 0 ? prevProviders[idx] : null;
+            if (provider) {
+                const sel = wrapper?.querySelector(".staff-provider-select");
+                if (sel) sel.value = provider.userNo || "";
+            }
+        }
     });
 
     // Show Delete button alongside Save
@@ -2993,6 +3071,25 @@ async function deleteOldVisitRecord() {
     } catch(err) { await handleTelemetryAlert("Old Visit Delete", err); }
 }
 
+// Collect service providers in same order as itemsRendered
+function _collectServiceProviders(checkedInputs) {
+    const providers = [];
+    checkedInputs.forEach(input => {
+        const wrapper = input.closest(".form-check");
+        const sel = wrapper?.querySelector(".staff-provider-select");
+        if (sel && sel.value) {
+            const selOpt = sel.options[sel.selectedIndex];
+            providers.push({
+                userNo: sel.value,
+                role: selOpt?.dataset?.role || ""
+            });
+        } else {
+            providers.push({ userNo: "", role: "" });
+        }
+    });
+    return providers;
+}
+
 async function processVisitDeductionFormSubmission(e) {
     e.preventDefault();
 
@@ -3049,6 +3146,7 @@ async function processVisitDeductionFormSubmission(e) {
             await updateDoc(_oldVisitLogDocRef, {
                 visitDate,
                 itemsRendered: newItemCodes,
+                serviceProviders: _collectServiceProviders(checkedInputs),
                 unitsSubtracted: checkedInputs.length,
                 calculatedValueCost: newCalcCost,
                 addlAmtReceived: newAddlAmt,
@@ -3184,6 +3282,7 @@ async function processVisitDeductionFormSubmission(e) {
             customerNo: custNo, allotId: allotId,
             packName: pData.packName, visitDate: visitDate,
             itemsRendered: renderedItemCodeTrackers,
+            serviceProviders: _collectServiceProviders(checkedInputs),
             unitsSubtracted: checkedInputs.length, calculatedValueCost: totalSubServicesValueCost,
             addlAmtReceived: addlAmtReceived, loggedAt: new Date().toISOString()
         });
