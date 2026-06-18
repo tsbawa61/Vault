@@ -395,9 +395,9 @@ function renderHomePage(role) {
 function initViewRouterLinks() {
     // GlamTrack brand — show stat-only glamtrack section
     document.getElementById("nav-glamtrack")?.addEventListener("click", async () => {
-        // If no session or SUPER_USER, do not show sec-glamtrack
-        if (!activeSessionUser || activeSessionUser.role === "SUPER_USER") {
-            showActiveFrame("sec-login");
+        // sec-glamtrack is shown only when OWNER is logged in
+        if (!activeSessionUser || activeSessionUser.role !== "OWNER") {
+            if (!activeSessionUser) showActiveFrame("sec-login");
             return;
         }
         showActiveFrame("sec-glamtrack");
@@ -1030,7 +1030,8 @@ function renderAuthorizedWorkspaceSession() {
         document.getElementById("sec-glamtrack").style.display = "none";
     } else {
         document.body.classList.remove("bg-glamtrack");
-        document.getElementById("sec-glamtrack").style.display = "";
+        // sec-glamtrack shown only for OWNER
+        document.getElementById("sec-glamtrack").style.display = (role === "OWNER") ? "" : "none";
     }
 
     // All logged-in users see Customers, Packages, Services
@@ -1358,7 +1359,7 @@ function openGlamtrackModal(type) {
         headHtml = `<tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Last Visit</th></tr>`;
         rows = _glamtrackFullUnengaged.map(r => `<tr><td><strong>#${r.customerNo}</strong></td><td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td><td>${r.lastVisit||"—"}</td></tr>`);
     } else if (type === "premium") {
-        title = "Premium Customers (Last 1Y > ₹20k)";
+        title = "Premium Customers";
         const isOwnerModal = activeSessionUser?.role === "OWNER";
         headHtml = `<tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Email</th>${isOwnerModal ? "<th>Total Spend (₹)</th>" : ""}</tr>`;
         rows = _glamtrackFullPremium.map(r => `<tr><td><strong>#${r.customerNo}</strong></td><td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td>${isOwnerModal ? `<td class="fw-bold text-success">₹${Number(r.totalSpend).toLocaleString("en-IN")}</td>` : ""}</tr>`);
@@ -2050,16 +2051,22 @@ function resetAllotExistingPackUI() {
     });
 
     // Clear extra field values and restore their col visibility
+    const opEl = document.getElementById("allot-original-price");
+    if (opEl) {
+        opEl.value = "";
+        const opCol = opEl.closest(".col-md-4");
+        if (opCol) opCol.style.display = "";
+    }
     const rbEl = document.getElementById("allot-remaining-balance");
     if (rbEl) {
         rbEl.value = "";
-        const rbCol = rbEl.closest(".col-md-6");
+        const rbCol = rbEl.closest(".col-md-4");
         if (rbCol) rbCol.style.display = "";
     }
     const ubEl = document.getElementById("allot-unpaid-balance-field");
     if (ubEl) {
         ubEl.value = "";
-        const ubCol = ubEl.closest(".col-md-6");
+        const ubCol = ubEl.closest(".col-md-4");
         if (ubCol) ubCol.style.display = "";
     }
 
@@ -2075,18 +2082,25 @@ function resetAllotExistingPackUI() {
 
 // Explicitly hides the three extra UI groups when no active package is found for the customer
 function hideAllotExtraUIElements() {
+    // Hide allot-original-price input and its label
+    const opEl = document.getElementById("allot-original-price");
+    if (opEl) {
+        opEl.value = "";
+        const opCol = opEl.closest(".col-md-4");
+        if (opCol) opCol.style.display = "none";
+    }
     // i) Hide allot-remaining-balance input and its label
     const rbEl = document.getElementById("allot-remaining-balance");
     if (rbEl) {
         rbEl.value = "";
-        const rbCol = rbEl.closest(".col-md-6");
+        const rbCol = rbEl.closest(".col-md-4");
         if (rbCol) rbCol.style.display = "none";
     }
     // ii) Hide allot-unpaid-balance-field input and its label
     const ubEl = document.getElementById("allot-unpaid-balance-field");
     if (ubEl) {
         ubEl.value = "";
-        const ubCol = ubEl.closest(".col-md-6");
+        const ubCol = ubEl.closest(".col-md-4");
         if (ubCol) ubCol.style.display = "none";
     }
     // iii) Hide allot-existing-nav and its entire contents (wrapper + all children)
@@ -2241,6 +2255,8 @@ function showAllotExistingPackAtIndex(idx) {
     }
 
     // Extra fields
+    const opEl = document.getElementById("allot-original-price");
+    if (opEl) opEl.value = p.totalAmount !== undefined ? `₹${Number(p.totalAmount).toLocaleString("en-IN")}` : "";
     const rbEl = document.getElementById("allot-remaining-balance");
     if (rbEl) rbEl.value = p.remainingBalance !== undefined ? p.remainingBalance : "";
     const ubEl = document.getElementById("allot-unpaid-balance-field");
@@ -3491,12 +3507,13 @@ async function refreshAllAdministrativeTables() {
                     ? ` <span class="badge bg-success ms-1">${discount.toFixed(1)}% off</span>`
                     : "No Discount";
 
+                const linkedWord = (data.packType === "Type3") ? "excluded" : "included";
                 tr.innerHTML = `
                     <td>${data.packName}</td>
                     <td hidden><span class="badge bg-dark">${data.packType === "Type1" ? "Item Counts" : "Cash Value Balance"}</span></td>
                     <td>₹${data.offerPrice}${discountBadge}</td>
                     <td>₹${data.totalAmount}</td>
-                    <td>${serviceCount} item${serviceCount === 1 ? "" : "s"} linked</td>
+                    <td>${serviceCount} item${serviceCount === 1 ? "" : "s"} ${linkedWord}</td>
                     <td><span class="badge ${data.active ? 'bg-success' : 'bg-secondary'}">${data.active ? 'Active' : 'Hidden'}</span></td>
                     <td><button class="btn btn-outline-secondary btn-sm py-0 px-2 copy-pack-btn" title="Copy package summary to clipboard">📋 Copy</button></td>`;
 

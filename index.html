@@ -73,6 +73,12 @@
             .table { font-size: 0.75rem; }
             .form-control, .form-select { font-size: 0.875rem; }
             .btn { font-size: 0.875rem; }
+            /* Background image: show wholly within mobile viewport, no cropping */
+            body.bg-glamtrack {
+                background-size: contain;
+                background-position: center top;
+                background-repeat: no-repeat;
+            }
             .col-md-6, .col-md-4, .col-md-3 { width: 100%; }
         }
         /* Hide spinners for allot price fields */
@@ -440,11 +446,15 @@
                             </div>
                         </div>
                         <!-- Extra fields shown only when existing active package found -->
-                            <div class="col-md-6 mb-2">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">Original Price (₹)</label>
+                                <input type="text" class="form-control" id="allot-original-price" readonly disabled>
+                            </div>
+                            <div class="col-md-4 mb-2">
                                 <label class="form-label small fw-bold">Remaining Services Balance</label>
                                 <input type="text" class="form-control" id="allot-remaining-balance" readonly>
                             </div>
-                            <div class="col-md-6 mb-2">
+                            <div class="col-md-4 mb-2">
                                 <label class="form-label small fw-bold">Unpaid Balance (₹)</label>
                                 <input type="text" class="form-control" id="allot-unpaid-balance-field" readonly>
                             </div>
