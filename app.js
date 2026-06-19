@@ -176,6 +176,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const utilizeSubSearch = document.getElementById("utilize-subservices-search");
+    if (utilizeSubSearch) {
+        utilizeSubSearch.addEventListener("input", () => {
+            const term = utilizeSubSearch.value.toLowerCase().trim();
+            document.querySelectorAll("#container-utilize-subservices .form-check").forEach(item => {
+                const label = item.querySelector("label");
+                const text = label ? label.textContent.toLowerCase() : "";
+                item.style.display = term === "" || text.includes(term) ? "" : "none";
+            });
+        });
+    }
+
     // Generic search filter helper
     function wireDropdownSearch(searchId, selectId, dispatchChange) {
         const si = document.getElementById(searchId);
