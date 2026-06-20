@@ -176,18 +176,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    const utilizeSubSearch = document.getElementById("utilize-subservices-search");
-    if (utilizeSubSearch) {
-        utilizeSubSearch.addEventListener("input", () => {
-            const term = utilizeSubSearch.value.toLowerCase().trim();
-            document.querySelectorAll("#container-utilize-subservices .form-check").forEach(item => {
-                const label = item.querySelector("label");
-                const text = label ? label.textContent.toLowerCase() : "";
-                item.style.display = term === "" || text.includes(term) ? "" : "none";
-            });
-        });
-    }
-
     // Generic search filter helper
     function wireDropdownSearch(searchId, selectId, dispatchChange) {
         const si = document.getElementById(searchId);
@@ -714,7 +702,7 @@ function initViewRouterLinks() {
             const itemData = targetDoc.data();
             document.getElementById("usr-role").value = itemData.role || "";
             document.getElementById("usr-fullname").value = itemData.name || "";
-            document.getElementById("usr-sex").value = itemData.sex || "Female";
+            document.getElementById("usr-sex").value = itemData.sex || "F";
             document.getElementById("usr-age").value = itemData.ageGroup || "";
             document.getElementById("usr-email").value = itemData.email || "";
             document.getElementById("usr-password").value = itemData.password || "";
@@ -860,6 +848,7 @@ This cannot be undone.`
             document.getElementById("sub-name").value = itemData.subServiceName || "";
             document.getElementById("sub-rate").value = itemData.rate !== undefined ? itemData.rate : "";
             document.getElementById("sub-duration").value = itemData.durationMinutes || "";
+            document.getElementById("sub-gender").value = itemData.sex || "";
             document.getElementById("sub-active").checked = itemData.active === true;
 
             appendCatalogDeleteButton({
@@ -1525,6 +1514,7 @@ async function processSubServiceFormSubmission(e) {
     const rate = document.getElementById("sub-rate").value;
     const duration = document.getElementById("sub-duration").value;
     const activeFlag = document.getElementById("sub-active").checked;
+    const gender = document.getElementById("sub-gender").value;
     if (!parentSrv) return alert("Validation: Please select a Main Service this item belongs to.");
     if (!name)      return alert("Validation: Please enter a name for this service item.");
     try {
@@ -1543,6 +1533,7 @@ async function processSubServiceFormSubmission(e) {
             serviceCode: parentSrv,
             rate: Number(rate),
             durationMinutes: Number(duration),
+            sex: gender || null,
             active: activeFlag,
             createdBy: activeSessionUser.role,
             startDate: new Date().toISOString().split("T")[0],
@@ -3438,32 +3429,26 @@ async function refreshAllAdministrativeTables() {
 
     {
         // Fetch subServices grouped by serviceCode, show serviceName from services as heading
-        const ssQ = query(collection(db, "subServices"),
-            where("ownerUserNo", "==", ownerId),
-            where("active", "==", true));
-        const ssSnap = await getDocs(ssQ);
-
-        // Also fetch services for serviceCode→serviceName lookup.
-        // sub-parent-srv dropdown (used when creating subServices) is populated from
-        // services where createdBy === "SUPER_USER" (global service list), NOT filtered
-        // by ownerUserNo. So the lookup map must include those records too, in addition
-        // to any owner-specific services, or the serviceName lookup will always fail.
-        const srvNameMap = new Map();
-
-        // 1) Owner-specific services (and OWNER's own userNo, since ownerUserNo on
-        //    services may equal userNo for OWNER role)
-        const srvOwnerIds = new Set([ownerId]);
-        if (activeSessionUser.role === "OWNER") srvOwnerIds.add(activeSessionUser.userNo);
-        for (const oId of srvOwnerIds) {
-            const srvQ = query(collection(db, "services"), where("ownerUserNo", "==", oId));
-            const srvSnap = await getDocs(srvQ);
-            srvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
+        const effectiveOwnerId = _ownerFilter();
+        let ssSnap = await getDocs(query(collection(db, "subServices"),
+            where("ownerUserNo", "==", effectiveOwnerId),
+            where("active", "==", true)));
+        if (ssSnap.empty) {
+            ssSnap = await getDocs(query(collection(db, "subServices"),
+                where("ownerUserNo", "==", "000"),
+                where("active", "==", true)));
         }
 
-        // 2) Global SUPER_USER-created services (matches sub-parent-srv dropdown source)
-        const superSrvQ = query(collection(db, "services"), where("createdBy", "==", "SUPER_USER"));
-        const superSrvSnap = await getDocs(superSrvQ);
-        superSrvSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
+        // Also fetch services for serviceCode→serviceName lookup, using the same
+        // effective ownerUserNo comparison as the sub-parent-srv dropdown: first try
+        // services where ownerUserNo matches the effective owner, and only if no such
+        // record exists, fall back to services where ownerUserNo === "000".
+        const srvNameMap = new Map();
+        let srvForNameSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", effectiveOwnerId)));
+        if (srvForNameSnap.empty) {
+            srvForNameSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", "000")));
+        }
+        srvForNameSnap.forEach(d => { const s = d.data(); srvNameMap.set(s.serviceCode, s.serviceName); });
 
         // Group subServices by serviceCode
         const grouped = new Map();
@@ -3484,6 +3469,7 @@ async function refreshAllAdministrativeTables() {
                 ssTbody.appendChild(headTr);
 
                 // Render items in pairs (2 per row)
+                items.sort((a, b) => (a.subServiceName || "").localeCompare(b.subServiceName || ""));
                 for (let i = 0; i < items.length; i += 2) {
                     const tr = document.createElement("tr");
                     const left  = items[i];
@@ -3608,12 +3594,15 @@ async function loadWorkspaceDropdownMappings() {
     await populateSelect("serviceCategories", "cat-select-existing", "catCode", "catName");
     await populateSelect("services", "srv-select-existing", "serviceCode", "serviceName");
     {
-        const superSrvQ = query(collection(db, "services"), where("createdBy", "==", "SUPER_USER"));
-        const superSrvSnap = await getDocs(superSrvQ);
+        const effectiveOwnerId = _ownerFilter();
+        let srvSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", effectiveOwnerId)));
+        if (srvSnap.empty) {
+            srvSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", "000")));
+        }
         const subParentEl = document.getElementById("sub-parent-srv");
         if (subParentEl) {
             subParentEl.innerHTML = `<option value="">-- Choose from Available List --</option>`;
-            superSrvSnap.forEach(d => {
+            srvSnap.forEach(d => {
                 const data = d.data();
                 subParentEl.innerHTML += `<option value="${data.serviceCode}">${data.serviceName} (ID: ${data.serviceCode})</option>`;
             });

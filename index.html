@@ -260,7 +260,7 @@
             <!-- iii) Premium Customers -->
             <div class="card mb-4 border-success" id="premium-section">
                 <div class="card-header bg-success text-white fw-bold">
-                    <span>Premium Customers</span>
+                    <span>Premium Customers (Last 1Y &gt; ₹20k)</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover my-0 small">
@@ -350,8 +350,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold" id="lbl-utilize-subservices">Services Provided During Today's Visit</label>
-                            <input type="text" id="utilize-subservices-search" class="form-control form-control-sm mb-2" placeholder="🔍 Search service items…" autocomplete="off">
+                            <label class="form-label small fw-bold">Services Provided During Today's Visit</label>
                             <div id="container-utilize-subservices" class="p-3 border rounded bg-light" tabindex="3">
                                 <span class="text-muted small">Please choose a package above to see available items.</span>
                             </div>
@@ -580,6 +579,16 @@
                             </div>
                         </div>
                         
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Service Applicable to Gender</label>
+                            <select class="form-select" id="sub-gender">
+                                <option value="">-- Choose Gender --</option>
+                                <option value="F">Female</option>
+                                <option value="M">Male</option>
+                                <option value="U">Unisex</option>
+                            </select>
+                        </div>
+
                         <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" id="sub-active" checked>
                             <label class="form-check-label small" for="sub-active">Make this Individual Service active on menu card</label>
@@ -726,9 +735,9 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Gender</label>
                                 <select class="form-select" id="usr-sex">
-                                    <option value="Female" selected>Female</option>
-                                    <option value="Male">Male</option>
-                                    <option value="Other">Other</option>
+                                    <option value="F" selected>Female</option>
+                                    <option value="M">Male</option>
+                                    <option value="O">Other</option>
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
