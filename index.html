@@ -320,13 +320,6 @@
                                         <label class="form-check-label small fw-bold" for="utilize-visit-old">Modify Old Visit</label>
                                     </div>
                                 </div>
-                                <!-- Old Visit: previous visit date dropdown (hidden by default) -->
-                                <div id="utilize-old-visit-wrapper" style="display:none;" class="mt-2">
-                                    <label class="form-label small fw-bold">Choose Previous Visit Date:</label>
-                                    <select class="form-select form-select-sm" id="utilize-old-visit-date-select">
-                                        <option value="">-- Select a Previous Visit Date --</option>
-                                    </select>
-                                </div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Select Active Package</label>
@@ -334,6 +327,13 @@
                                     <option value="">-- Choose a Customer First --</option>
                                 </select>
                                 <input type="text" id="utilize-pack-search" class="form-control form-control-sm mt-1" placeholder="🔍 Search package by name…" autocomplete="off">
+                                <!-- Old Visit: previous visit date dropdown (hidden by default) -->
+                                <div id="utilize-old-visit-wrapper" style="display:none;" class="mt-2">
+                                    <label class="form-label small fw-bold">Choose Previous Visit Date:</label>
+                                    <select class="form-select form-select-sm" id="utilize-old-visit-date-select">
+                                        <option value="">-- Select a Previous Visit Date --</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         <div id="utilize-pack-financial" class="mb-3 p-3 bg-warning-subtle border border-warning rounded small" style="display:none;">
@@ -351,6 +351,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Services Provided During Today's Visit</label>
+                            <input type="text" id="utilize-subservices-search" class="form-control form-control-sm mb-2" placeholder="🔍 Search service items…" autocomplete="off">
                             <div id="container-utilize-subservices" class="p-3 border rounded bg-light" tabindex="3">
                                 <span class="text-muted small">Please choose a package above to see available items.</span>
                             </div>

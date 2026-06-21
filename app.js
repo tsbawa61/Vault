@@ -141,6 +141,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const utilizeSubSearch = document.getElementById("utilize-subservices-search");
+    if (utilizeSubSearch) {
+        utilizeSubSearch.addEventListener("input", () => {
+            const term = utilizeSubSearch.value.toLowerCase().trim();
+            document.querySelectorAll("#container-utilize-subservices .form-check").forEach(item => {
+                const label = item.querySelector("label");
+                const text = label ? label.textContent.toLowerCase() : "";
+                item.style.display = term === "" || text.includes(term) ? "" : "none";
+            });
+        });
+    }
+
     const allotCustSearch = document.getElementById("allot-customer-search");
     if (allotCustSearch) {
         allotCustSearch.addEventListener("input", () => {
@@ -1412,7 +1424,15 @@ async function renderCatalogSubServicesCheckboxes() {
     try {
         const q = query(collection(db, "subServices"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo), where("active", "==", true)); 
         const snap = await getDocs(q);
-        
+
+        // Join with services collection on serviceCode + ownerUserNo to get serviceName
+        const srvNameMap = new Map();
+        const srvSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo)));
+        srvSnap.forEach(d => {
+            const s = d.data();
+            srvNameMap.set(s.serviceCode, s.serviceName);
+        });
+
         const srchBox = document.getElementById("pack-subservices-search");
         if (srchBox) srchBox.value = "";
         container.innerHTML = "";
@@ -1423,11 +1443,13 @@ async function renderCatalogSubServicesCheckboxes() {
 
         snap.forEach(d => {
             const ss = d.data();
+            const parentServiceName = srvNameMap.get(ss.serviceCode) || "";
+            const displayLabel = parentServiceName ? `${ss.subServiceName} (${parentServiceName})` : ss.subServiceName;
             container.innerHTML += `
                 <div class="form-check">
                     <input class="form-check-input chk-pack-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${ss.rate}" id="chk-ss-${ss.subServiceCode}">
                     <label class="form-check-label small" for="chk-ss-${ss.subServiceCode}">
-                        ${ss.subServiceName} (₹${ss.rate})
+                        ${displayLabel} (₹${ss.rate})
                     </label>
                 </div>`;
         });
@@ -2694,6 +2716,9 @@ async function renderUtilizeSubServicesCheckboxes() {
     const addlAmtEl = document.getElementById("utilize-addl-amt-received");
     if (!container) return;
 
+    const utilizeSrchBox = document.getElementById("utilize-subservices-search");
+    if (utilizeSrchBox) utilizeSrchBox.value = "";
+
     container.innerHTML = "";
     if (financialEl) financialEl.style.display = "none";
     if (totalEl) { totalEl.style.display = "none"; totalEl.textContent = ""; }
@@ -2776,6 +2801,15 @@ async function renderUtilizeSubServicesCheckboxes() {
 
         const isType3 = pData.packType === "Type3";
 
+        // Join: build serviceCode -> serviceName lookup from services collection,
+        // matching ownerUserNo (same scope as subServices queries below)
+        const srvNameMap = new Map();
+        const srvForNameSnap = await getDocs(query(collection(db, "services"), where("ownerUserNo", "==", activeSessionUser.ownerUserNo)));
+        srvForNameSnap.forEach(d => {
+            const s = d.data();
+            srvNameMap.set(s.serviceCode, s.serviceName);
+        });
+
         if (isType3) {
             // (a) Type3: fetch ALL subservices for this owner, exclude those in subServicesArray
             const excludedCodes = new Set(pData.subServicesArray || []);
@@ -2788,12 +2822,14 @@ async function renderUtilizeSubServicesCheckboxes() {
                 const ss = doc.data();
                 if (excludedCodes.has(ss.subServiceCode)) return; // skip excluded
                 const origRate = Number(ss.rate);
+                const parentServiceName = srvNameMap.get(ss.serviceCode) || "";
+                const displayName = parentServiceName ? `${ss.subServiceName} (${parentServiceName})` : ss.subServiceName;
                 // (b) Type3: only original price, green bold, no strikethrough, data-rate = origRate
                 container.innerHTML += `
                     <div class="form-check">
                         <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${origRate}" id="chk-ut-${ss.subServiceCode}">
                         <label class="form-check-label small" for="chk-ut-${ss.subServiceCode}">
-                            ${ss.subServiceName} — <span class="text-success fw-bold">₹${origRate.toLocaleString("en-IN")}</span>
+                            ${displayName} — <span class="text-success fw-bold">₹${origRate.toLocaleString("en-IN")}</span>
                         </label>
                     </div>`;
                 anyRendered = true;
@@ -2824,6 +2860,8 @@ async function renderUtilizeSubServicesCheckboxes() {
                     const ss = ssSnap.docs[0].data();
                     const origRate       = Number(ss.rate);
                     const discountedRate = applyDiscount(origRate);
+                    const parentServiceName = srvNameMap.get(ss.serviceCode) || "";
+                    const displayName = parentServiceName ? `${ss.subServiceName} (${parentServiceName})` : ss.subServiceName;
                     const priceLabel = discountPct > 0
                         ? `<span class="text-decoration-line-through text-muted me-1">₹${origRate.toLocaleString("en-IN")}</span><span class="text-success fw-bold">₹${discountedRate.toLocaleString("en-IN")}</span>`
                         : `<span class="fw-bold">₹${origRate.toLocaleString("en-IN")}</span>`;
@@ -2831,7 +2869,7 @@ async function renderUtilizeSubServicesCheckboxes() {
                         <div class="form-check">
                             <input class="form-check-input chk-utilize-subservice" type="checkbox" value="${ss.subServiceCode}" data-rate="${discountedRate}" id="chk-ut-${ss.subServiceCode}">
                             <label class="form-check-label small" for="chk-ut-${ss.subServiceCode}">
-                                ${ss.subServiceName} — ${priceLabel}
+                                ${displayName} — ${priceLabel}
                             </label>
                         </div>`;
                 }
